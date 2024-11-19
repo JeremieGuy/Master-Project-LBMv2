@@ -11,7 +11,7 @@ import time
 
 ########################### Flow definition #############################################
 
-maxIter = 5000  # Total number of time iterations.
+maxIter = 5500  # Total number of time iterations.
 Re = 10.0         # Reynolds number.
 nx, ny = 40, 21 # Number of lattice nodes.
 R = ny//2       # rayon of tube section
@@ -350,7 +350,7 @@ openPath = invert(bounceback)
 
 # Force array resistance for porous region
 K = zeros((2,nx,ny))
-K[0,bounceback] = 1
+# K[0,bounceback] = 1
 # adding a resisting force in x direction on the porous region
 K[0,clotCoord[0]:clotCoord[1]+1,1:ny-1] = K_initial[0]
 
