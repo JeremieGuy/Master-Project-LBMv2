@@ -10,20 +10,32 @@ import os
 import time
 
 ########################### Flow definition #############################################
+# iterations
+maxIter = 50000# Total number of time iterations.
 
-maxIter = 6000  # Total number of time iterations.
-Re = 10.0         # Reynolds number.
-nx, ny = 100, 21 # Number of lattice nodes.
+# system Size
+nx, ny = 260, 200 # Number of lattice nodes.
 R = ny//2       # rayon of tube section
-# nulb    = uLB*R*2/Re;             # Viscoscity in lattice units. velocity*characteristic length (= H)/Raynolds
+tubeSize = 21 # diameters of the tubes in the system
+Rtube = tubeSize//2 #radius of smaller tube sections
+
+# system vairbales
+Re = 10.0         # Reynolds number.
+# nulb    = uLB*R*2/Re;             # Viscoscity in lattice unitss. velocity*characteristic length (= H)/Raynolds
 nulb = 0.01
 omega = 1 / (3*nulb+0.5);    # Relaxation parameter.
 velocity = 0.04             # Velocity in lattice units.
 cs2 = 1/3                # sound veocity adapted to lattice units     
 initialDensity = 2.5 # inital density of the system
-F = [0.0001,0] # pushing force F[x,y]
+
+# Force
+F = [0,-0.0001] # pushing force F[x,y]
 K_initial = [0.001,0] # initial resisting force of porous region K[2,x,y]
-clotCoord = [40,60] # clot coordinates
+
+# Clot
+clotSize = 20 # size of the clot lenghtwise in a tube section
+clotCoord = [nx//2-clotSize//2,nx//2+clotSize//2] # clot coordinates
+
 
 ########################## Lattice Constants ###########################################
 
@@ -58,43 +70,26 @@ def equilibrium(rho, u):
         feq[i,openPath] = rho[openPath]*t[i] * (1 + cu + 0.5*cu**2 - usqr)
     return feq
 
-# setting relevant BB nodes to 0 on the 31x23 system
+# setting relevant BB nodes to 0 on the system
 def setBBNodeToZero():
-    # top border
-    fin[:,:,ny-1] = 0
-    # bottom border
-    fin[:,:,0] = 0
-    # right border
-    # fin[:,nx-1,:] = 0
-
-    # obstacle
-    # fin[:,0:249,52:99] = 0
-
-     # top border
-    fout[:,:,ny-1] = 0
-    # bottom border
-    fout[:,:,0] = 0
-    # right border
-    # fout[:,nx-1,:] = 0
-
-    # obstacle
-    # fout[:,0:249,52:99] = 0
-
-    rho[:,ny-1] = 0
-    rho[:,0] = 0
+    fin[:,bounceback] = 0
+    fout[:,bounceback] = 0
+    rho[bounceback] = 0
 
 # Adding a force to u
 def addResistingClotForce():
 
     # computing a resisting force on the porous region
     FF = zeros((9,nx,ny))
-    # for i in range(9):
-    #     FF[i,:,:] = rho*(v[i,0]*(F[0] - K[0,:,:]*u[0,:,:]) + v[i,1]*F[1])
-    #     FF[i,:,:] = FF[i,:,:] * (t[i] / cs2)
-    
     for i in range(9):
-        FF[i,clot] = rho[clot]*(v[i,0]*(F[0] - K[0,clot]*u[0,clot]) + v[i,1]*F[1])
-        FF[i,clot] = FF[i,clot] * (t[i] / cs2)
+        FF[i,:,:] = rho*(v[i,0]*(F[0] - K[0,:,:]*u[0,:,:]) + v[i,1]*F[1])
+        FF[i,:,:] = FF[i,:,:] * (t[i] / cs2)
+
+    # computing a resisting force on the porous region
+    # FF = zeros((9,nx,ny))
+    # for i in range(9):
+    #     FF[i,clot] = rho[clot]*(v[i,0]*(F[0] - K[0,clot]*u[0,clot]) + v[i,1]*F[1])
+    #     FF[i,clot] = FF[i,clot] * (t[i] / cs2)
 
     return FF
 
@@ -103,7 +98,8 @@ def addResistingClotForce():
 
 def plotSystem():
     norm = plt.Normalize(vmin=0,vmax=0.7)
-    flagsname = ["open path", "bounceback", "inlet", "outlet"]
+    # flagsname = ["Open Path", "Bounceback", "Clot","Inlet", "Outlet"]
+    flagsname = ["Open Path", "Bounceback","Clot","Acceleration Field","Inlet", "Outlet"]
     plt.figure(figsize=(7.9,4))
     plt.title("Flags")
     values = unique(flags_plot.ravel())
@@ -113,15 +109,22 @@ def plotSystem():
     patches = [ mpatches.Patch(color=colors[i], label=flagsname[i] ) for i in range(len(values)) ]
     plt.title("Flags")
     plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0. )
-    # plt.plot([10,10],[100,100], color="red", linewidth=3)
+    
+    # velocity profiles lines
+    # plt.plot([nx//2, nx//2], [1, 1+tubeSize], linestyle='--', color='red', linewidth=1) # top
+    plt.plot([(nx-1-tubeSize), nx-2], [ny//2, ny//2], linestyle='--', color='red', linewidth=1) # right
+    plt.plot([nx//2, nx//2], [(ny-1-tubeSize), ny-2], linestyle='--', color='red', linewidth=1) # bottom
     plt.savefig(new_dir_monitoring + "/system.png",bbox_inches='tight')
     # plt.show()
+    
     plt.close()
+
 
 def plotResults():
 
     plt.clf()
-    x_full = arange(0,nx,1)
+    plotBiais = int(tubeSize*1.5)
+    x_full = arange(1+plotBiais,nx-1-plotBiais,1)
 
     fig, (ax0, ax1, ax2, ax3) = plt.subplots(4, 1, figsize=(8, 10))
 
@@ -131,32 +134,40 @@ def plotResults():
     im0 = ax0.imshow(sqrt(u[0]**2+u[1]**2).transpose(), cmap=cm.Reds)
     ax0.set_title("Full system (Clot = [" + str(clotCoord[0]) + "," + str(clotCoord[1]) + "])")
     ax0.set_ylabel("Y coordinates")
-    ax0.set_aspect('auto')
-    ax0.axvline(x=clotCoord[0], color='red', linestyle='--', linewidth=1)
-    ax0.axvline(x=clotCoord[1], color='red', linestyle='--', linewidth=1)
 
+    # graphic display zone
+    ax0.plot([1+plotBiais,nx-1-plotBiais],[1,1], color="red", linestyle="--", linewidth=1)
+    ax0.plot([1+plotBiais,nx-1-plotBiais],[1+tubeSize,1+tubeSize], color="red", linestyle="--", linewidth=1)
+    ax0.plot([1+plotBiais,1+plotBiais],[1,1+tubeSize], color="red", linestyle="--", linewidth=1)
+    ax0.plot([nx-1-plotBiais,nx-1-plotBiais],[1,1+tubeSize], color="red", linestyle="--", linewidth=1)
+
+    # clot
+    ax0.plot([clotCoord[0],clotCoord[1]],[1,1], color="blue", linestyle="--", linewidth=1)
+    ax0.plot([clotCoord[0],clotCoord[1]],[1+tubeSize,1+tubeSize], color="blue", linestyle="--", linewidth=1)
+    ax0.plot([clotCoord[0],clotCoord[0]],[1,1+tubeSize], color="blue", linestyle="--", linewidth=1)
+    ax0.plot([clotCoord[1],clotCoord[1]],[1,1+tubeSize], color="blue", linestyle="--", linewidth=1)
     fig.colorbar(im0, ax=ax0, orientation='vertical', label="Velocity [m/s]", pad=0.02)
 
     # velocities
-    u_x = mean(u[0].transpose(),axis=0)
+    u_x = mean(u[0,(1+plotBiais):(nx-1-plotBiais),1:(1+tubeSize+1)].transpose(),axis=0)
     ax1.plot(x_full,u_x)
     ax1.set_ylabel("Velocity u(x) mean [m/s]")
-    ax1.axvline(x=clotCoord[0], color='red', linestyle='--', linewidth=1)
-    ax1.axvline(x=clotCoord[1], color='red', linestyle='--', linewidth=1)
+    ax1.axvline(x=clotCoord[0], color='blue', linestyle='--', linewidth=1)
+    ax1.axvline(x=clotCoord[1], color='blue', linestyle='--', linewidth=1)
 
     # densities
-    rho_x = mean(rho,axis=1)
+    rho_x = mean(rho[1+plotBiais:nx-1-plotBiais,1:1+tubeSize+1],axis=1)
     ax2.plot(x_full,rho_x)
     ax2.set_ylabel("Density rho(x) mean")
-    ax2.axvline(x=clotCoord[0], color='red', linestyle='--', linewidth=1)
-    ax2.axvline(x=clotCoord[1], color='red', linestyle='--', linewidth=1)
+    ax2.axvline(x=clotCoord[0], color='blue', linestyle='--', linewidth=1)
+    ax2.axvline(x=clotCoord[1], color='blue', linestyle='--', linewidth=1)
 
     # flow = rho*u
     ax3.plot(x_full,u_x*rho_x)
     ax3.set_ylabel("Flow u(x)*rho(x) [m/s]")
     ax3.set_xlabel("X Coordinates")
-    ax3.axvline(x=clotCoord[0], color='red', linestyle='--', linewidth=1)
-    ax3.axvline(x=clotCoord[1], color='red', linestyle='--', linewidth=1)
+    ax3.axvline(x=clotCoord[0], color='blue', linestyle='--', linewidth=1)
+    ax3.axvline(x=clotCoord[1], color='blue', linestyle='--', linewidth=1)
 
     name = new_dir_clot_velocity + "/" + "sanity_check_" + str(execTime)
     plt.savefig(name, bbox_inches='tight')
@@ -285,9 +296,71 @@ def drawoutput(populationFile):
 
     populationFile.write(dotline + "\n")
 
+def plotVelocityProfiles():
+
+    #### Final velocities
+    # Top cylindier
+    # uTop = abs(u[0,nx//2,1:tubeSize+1])
+    # umaxTop = max(uTop)
+    # Right cylinder
+    uRight = abs(u[1,(nx-1-tubeSize):nx-1,ny//2])
+    umaxMid = max(uRight)
+    # Bottom cylinder
+    uBot = abs(u[0,nx//2,(ny-1-tubeSize):ny-1])
+    umaxBot = max(uBot)
+
+    # velocity Plotting variables
+    r = abs(arange((-tubeSize//2)+1,(tubeSize//2)+1,1))
+    
+    x = arange(0,tubeSize,1)
+
+    # expected velocities
+    # expectedUTop = [umaxTop*(1-(i/Rtube)**2) for i in r]
+    expecteduRight = [umaxMid*(1-(i/Rtube)**2) for i in r]
+    expectedUBot = [umaxBot*(1-(i/Rtube)**2) for i in r]
+
+    # plot
+    plt.clf()
+
+    fig, (ax2, ax3) = plt.subplots(1, 2,figsize=(11, 4))
+
+    fig.suptitle('Velocity Profiles')
+
+    # ax1.plot(x,uTop, label = "Real Profile")
+    # ax1.plot(x,expectedUTop, label = "Expected Profile")
+    # ax1.set_title('Top cylinder')
+    # ax1.set_xlabel("Tube width coordinates")
+    # ax1.set_ylabel("Velocity")
+    # ax1.legend()
+    # ax1.set_ylim([-0.01,umaxTop+0.01])
+
+    ax2.plot(x,uRight, label = "Real Profile")
+    ax2.plot(x,expecteduRight, label = "Expected Profile")
+    ax2.set_title('Right cylinder')
+    ax2.set_xlabel("Tube width coordinates")
+    # ax2.set_ylabel("Velocity")
+    ax2.legend()
+    ax2.set_ylim([-0.01,umaxMid+0.01])
+
+    ax3.plot(x,uBot, label = "Real Profile")
+    ax3.plot(x,expectedUBot, label = "Expected Profile")
+    ax3.set_title('Bottom cylinder')
+    ax3.set_xlabel("Tube width coordinates")
+    # ax3.set_ylabel("Velocity")
+    ax3.legend()
+    ax3.set_ylim([-0.01,umaxMid+0.01])
+
+    plt.subplots_adjust(wspace=0.3, hspace=0.3)
+    
+    name = new_dir_velocity + "/" + "velocity_profiles_" + str(execTime)
+    plt.savefig(name, bbox_inches='tight')
+    # plt.show()
+    plt.close()
+    plt.clf()
+
 ##################### DEFINING CONTROL VARIABLES #####################
 
-new_dir_monitoring = "./Monitoring/FF_viscosity=" + str(nulb) + "_Rho=" + str(initialDensity) 
+new_dir_monitoring = "./Monitoring/FF_loop_clotv3_FULLFF_"+str(nx)+"x"+str(ny)+"_viscosity=" + str(nulb) + "_Rho=" + str(initialDensity) 
 new_dir_monitoring += "_F=" + str(F) + "_K=" + str(K_initial)
 new_dir_monitoring += "_it=" + str(maxIter)
 
@@ -300,10 +373,10 @@ if not os.path.exists(new_dir_clot_velocity):
     os.mkdir(new_dir_clot_velocity)
     print("Made new clot velocity directory : " + new_dir_clot_velocity)
 
-# new_dir_velocity = new_dir_monitoring + "/Velocity_profiles"
-# if not os.path.exists(new_dir_velocity):
-#     os.mkdir(new_dir_velocity)
-#     print("Made new velocity profile directory : " + new_dir_velocity)
+new_dir_velocity = new_dir_monitoring + "/Velocity_profiles"
+if not os.path.exists(new_dir_velocity):
+    os.mkdir(new_dir_velocity)
+    print("Made new velocity profile directory : " + new_dir_velocity)
 
 populationFile = open(new_dir_monitoring + "/monitor_clot_nodes_it=" + str(maxIter) + ".txt", 'w')
 
@@ -317,23 +390,42 @@ dotline += "\n"
 bounceback = full((nx,ny),False)
 bounceback[:,0] = True
 bounceback[:,ny-1] = True
+bounceback[0,:] = True
+bounceback[nx-1,:] = True
+
+# obstacle
+# bounceback[22:128,22:78] = True
+bounceback[tubeSize+1:(nx-1-tubeSize),tubeSize+1:(ny-1-tubeSize)] = True
 
 # open path flags
 openPath = invert(bounceback)
 
+# Pulsing field for fluid aceleration
+pulseField = full((nx,ny),False)
+# pulseField[1:22,40:61] = True
+pulseField[1:tubeSize+1,(ny//2-10):(ny//2+11)] = True
+
+
+# clot
+clot = full((nx,ny),False)
+# clot[(nx-1-tubeSize):nx-1,(ny//2-10):(ny//2+11)] = True
+clot[clotCoord[0]:clotCoord[1]+1,1:1+tubeSize+1] = True
 
 # Force array resistance for porous region
 K = zeros((2,nx,ny))
-K[0,bounceback] = 1
+K[0,clot] = K_initial[0]
+K[1,clot] = K_initial[1]
+
+
+# K[0,bounceback] = 1
 # adding a resisting force in x direction on the porous region
-K[0,clotCoord[0]:clotCoord[1]+1,1:ny-1] = K_initial[0]
+# K[0,clotCoord[0]:clotCoord[1]+1,1:ny-1] = K_initial[0]
 
 #### draw system
 # open path = 0
 flags_plot = zeros((nx,ny))
 
-clot = full((nx,ny),False)
-clot[clotCoord[0]:clotCoord[1]+1,1:ny-1] = True
+flags_plot[openPath] = 0
 
 # bounceback = 1
 flags_plot[bounceback] = 1
@@ -341,9 +433,14 @@ flags_plot[bounceback] = 1
 # clot = 2
 flags_plot[clot] = 2
 
+# aceleration pulse field = 3
+flags_plot[pulseField] = 3
+
+# flags_plot[nx//2,ny//2] = 4
+
 plotSystem()
 
-initializePopFile(populationFile)
+# initializePopFile(populationFile)
 
 ################################### System Initliaization ##########################################
 
@@ -377,14 +474,19 @@ for execTime in range(maxIter):
 
     # right wall: outflow condition.
     # fin[col3,-1,:] = fin[col3,-2,:]
-    drawoutput(populationFile)
+    # drawoutput(populationFile)
 
     # Compute macroscopic variables, density and velocity.
     rho, u = macroscopic(fin)
 
-    # Adding a horizontal force on the system
-    u[0,openPath] += F[0]
-    u[1,openPath] += F[1]
+    # Adding a pulsing horizontal force on the system
+    # if (execTime%100<50):
+    #     u[0,pulseField] += F[0]
+    #     u[1,pulseField] += F[1]
+
+    # Adding a constant horizontal force on the system
+    u[0,pulseField] += F[0]
+    u[1,pulseField] += F[1]
 
     # Left wall: inflow condition.
     # u[:,0,:] = vel[:,0,:]
@@ -430,17 +532,18 @@ for execTime in range(maxIter):
     fin[8,:,:] = roll(roll(fout[8,:,:],-1,axis=0),-1,axis=1)
 
 
-    if (execTime%10==0):
-        plt.clf()
-        # plot velocities
-        plt.imshow(sqrt(u[0]**2+u[1]**2).transpose(), cmap=cm.Reds)
-        # plt.savefig("vel.{0:03d}.png".format(time//100))
+    # if (execTime%10==0):
+    #     plt.clf()
+    #     # plot velocities
+    #     plt.imshow(sqrt(u[0]**2+u[1]**2).transpose(), cmap=cm.Reds)
+    #     # plt.savefig("vel.{0:03d}.png".format(time//100))
 
-        plt.pause(.01)
-        plt.cla()
+    #     plt.pause(.01)
+    #     plt.cla()
     
     if(execTime%1000==0):
         plotResults()
+        plotVelocityProfiles()
     
     
 
@@ -456,6 +559,7 @@ print("Execution time : " + str(end_time-start_time) + " [s]")
 
 # output result file
 plotResults()
+plotVelocityProfiles()
 
 ####################### COMMENTS & QUESTIONS #################################
 # When changing dimensions, Change : flags, Mask, Bounceback nodes, inlet, outlet, velocity profiles
