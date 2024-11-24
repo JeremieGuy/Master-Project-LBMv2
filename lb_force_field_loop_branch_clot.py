@@ -9,7 +9,7 @@ import time
 ########################### Flow & Topology Definition #############################################
 
 # Max iterations (dt =1)
-maxIter = 60000                 
+maxIter = 900                 
 
 # System topology definition
 nx, ny = 260, 200               # Number of lattice nodes (dx = 1)
@@ -111,10 +111,10 @@ def dissolveClot(rho, u, K, clot):
     K_tmp2 = K[0,clot] - dissolution2
 
     # Assessing if dissolution is > 0 -> if not set value to 0
-    condition = K_tmp1 > 0  # Create a boolean mask
-    condition = K_tmp2 > 0
-    filtered_K_tmp1 = where(condition, K_tmp1, 0) # Check if value validates condition
-    filtered_K_tmp2 = where(condition, K_tmp2, 0) # else replace by 0
+    condition1 = K_tmp1 > 0  # Create a boolean mask
+    condition2 = K_tmp2 > 0
+    filtered_K_tmp1 = where(condition1, K_tmp1, 0) # Check if value validates condition
+    filtered_K_tmp2 = where(condition2, K_tmp2, 0) # else replace by 0
 
     # Updating the dissolved K
     K[0, clot] =  filtered_K_tmp1
@@ -212,12 +212,12 @@ for execTime in range(maxIter):
     fin[8,:,:] = roll(roll(fout[8,:,:],-1,axis=0),-1,axis=1)    # i = 8
 
     # Velocity visualisation
-    # if (execTime%10==0):
+    if (execTime%10==0):
         # visualise(u)
-        # showClotForce(clotForceDirectory, K_initial, K, clot, execTime)
+        showClotForce(clotForceDirectory, K_initial, K, clot, execTime)
     
     # Clot dissolution step
-    # K = dissolveClot(rho, u, K, clot)
+    K = dissolveClot(rho, u, K, clot)
     
     # Clot velocity and velocity profiles graphics generation
     # if(execTime%1000==0):

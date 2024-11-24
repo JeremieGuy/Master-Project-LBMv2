@@ -292,6 +292,9 @@ def saveVariables(nx , ny, viscosity, rho_initial, F_initial, K_initial, maxIter
     # Generating the file
     with open(filename + ".pkl", 'wb') as f:
         pickle.dump([fin, fout, rho, u], f)
+    
+    # Closing the file
+    f.close()
 
 # Getting saved already converged variables to start the system
 def getVariables(nx, ny, viscosity, rho_initial, F_initial, K_initial, maxIter):
@@ -304,6 +307,9 @@ def getVariables(nx, ny, viscosity, rho_initial, F_initial, K_initial, maxIter):
     # Recovering variables
     with open(filename + ".pkl", "rb") as f:  # Python 3: open(..., 'rb')
         fin, fout, rho, u = pickle.load(f)
+
+    # Closing the file
+    f.close()
     
     # Returning variables
     return fin, fout, rho, u
