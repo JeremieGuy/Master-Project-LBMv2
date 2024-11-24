@@ -247,6 +247,13 @@ def testClotVelocities():
     ax3.plot(x,vel)
     plt.show()
 
+def showClotForce():
+    shape = (2, 40, 21)
+    K = np.random.uniform(low=0.0, high=0.001, size=shape)
+    plt.clf()
+    plt.imshow(K[0])
+    plt.show()
+
 # testMatrix()
 # testMeshGrid()
 # testFull()
@@ -264,10 +271,10 @@ def testClotVelocities():
 # testwrite()
 # testinivel()
 # testAffichage()
-testflagsmallsystem()
+# testflagsmallsystem()
 # rangetest()
 # rolltest()
 # notMatTest()
 # testexepctedprofile()
-
 # testClotVelocities()
+showClotForce()

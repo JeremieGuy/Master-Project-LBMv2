@@ -1,12 +1,44 @@
 from numpy import *
-# import matplotlib as mp
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib import cm
 import os
+import pickle
+
+# Function call examples 
+"""
+# Creating monitoring directories
+-> Has to be called first to generate directories to save results for the other monitoring functions
+mainDirectory, clotDirectory, velocityDirectory, clotForceDirectory = createRepositories(maxIter,nx,ny,viscosity,rho_initial,F_initial,K_initial)
+-> if only some directories are needed : 
+mainDirectory, clotDirectory, _ , _= createRepositories(maxIter,nx,ny,viscosity,rho_initial,F_initial,K_initial)
+
+# Displaying the system topology
+plotSystem(mainDirectory, nx, ny, tubeSize, bounceback, openPath, clot, pulseField)
+
+# Generating the velocity profiles at execTime iterations
+-> if called before the main loop, set execTime to 0
+plotVelocityProfiles(velocityDirectory, nx, ny, tubeSize, u, execTime)
+    
+# Generating the clot velocity, density and flow graphics at execTime iterations
+-> if called before the main loop, set execTime to 0
+plotResults(clotDirectory, ny, tubeSize, clotCoord, u, rho, execTime)
+
+# Generating the image for the porous region dissolving rates
+-> if called before the main loop, set execTime to 0
+showClotForce(clotForceDirectory, K_initial, K, clot, execTime)
+
+# Saving the converged system to reuse later
+saveVariables(nx, ny, viscosity, rho_initial, F_initial, K_initial, maxIter, fin, fout, rho, u)
+
+# Getting the saved already converged system 
+fin, fout, _, _ = getVariables(nx, ny, viscosity, rho_initial, F_initial, K_initial, 60000)
+-> the iterations are given directly to always take the same value we calculated
+-> rho and u are not needed to run the simulation so we need to load only fin and fout
+"""
 
 # initialising the directories to save the output
-def createRepositories(maxIter, nx, ny, viscosity, initialDensity, F_initial, K_initial):
+def createRepositories(maxIter, nx, ny, viscosity, rho_initial, F_initial, K_initial):
 
     # Root monitoring directory
     root = "./Monitoring"
@@ -15,7 +47,7 @@ def createRepositories(maxIter, nx, ny, viscosity, initialDensity, F_initial, K_
         print("Made new root monitoring directory : " + root)
 
     # Main working directory for current execution
-    new_dir_monitoring = "./Monitoring/FF_branch_clean_"+str(nx)+"x"+str(ny)+"_viscosity=" + str(viscosity) + "_Rho=" + str(initialDensity) 
+    new_dir_monitoring = root + "/FULLMACRO_DISSOLVE_FF_branch_clean_"+str(nx)+"x"+str(ny)+"_viscosity=" + str(viscosity) + "_Rho=" + str(rho_initial) 
     new_dir_monitoring += "_F=" + str(F_initial) + "_K=" + str(K_initial)
     new_dir_monitoring += "_it=" + str(maxIter)
     if not os.path.exists(new_dir_monitoring):
@@ -34,7 +66,13 @@ def createRepositories(maxIter, nx, ny, viscosity, initialDensity, F_initial, K_
         os.mkdir(new_dir_velocity)
         print("Made new velocity profile directory : " + new_dir_velocity)
 
-    return new_dir_monitoring, new_dir_clot_velocity, new_dir_velocity
+    # Directory for clot force rates
+    new_dir_clot_force = new_dir_monitoring + "/Clot_force"
+    if not os.path.exists(new_dir_clot_force):
+        os.mkdir(new_dir_clot_force)
+        print("Made new clot force directory : ", new_dir_clot_force)
+
+    return new_dir_monitoring, new_dir_clot_velocity, new_dir_velocity, new_dir_clot_force
 
 # Drawing a figure of the system, with velocitiy profiles sites
 def plotSystem(main_directory, nx, ny, tubeSize, bounceback, openPath, clot, pulseField):
@@ -78,7 +116,6 @@ def plotSystem(main_directory, nx, ny, tubeSize, bounceback, openPath, clot, pul
     # Cleanup
     plt.show() 
     plt.close()
-
 
 # Displaying the results
 def plotResults(clot_directory, nx, tubeSize, clotCoord, u, rho, execTime):
@@ -135,7 +172,6 @@ def plotResults(clot_directory, nx, tubeSize, clotCoord, u, rho, execTime):
     name = clot_directory + "/" + "sanity_check_" + str(execTime)
     plt.savefig(name, bbox_inches='tight')
     plt.close()
-
 
 # Plotting and saving the velocity profiles 
 def plotVelocityProfiles(velocity_directory, nx, ny, tubeSize, u, execTime):
@@ -211,3 +247,65 @@ def visualise(u):
         plt.imshow(sqrt(u[0]**2+u[1]**2).transpose(), cmap=cm.Reds)
         plt.pause(.01)
         plt.cla()
+
+# Visualisation of the resisting forces inside the clot
+def showClotForce(directory, K_initial, K, clot, execTime):
+    # Blank state
+    plt.clf()
+
+    # Showing the porous media resistance value
+    # Note : both x & y decrease simutanously so displaying only one of them is sufficient
+    rows, cols = where(clot)
+    row_start, row_end = rows.min(), rows.max() + 1
+    col_start, col_end = cols.min(), cols.max() + 1
+
+    result = K[0, row_start:row_end, col_start:col_end]
+
+    minVal = 0
+    maxVal = K_initial[0]
+
+    plt.imshow(result.transpose(), vmin=minVal, vmax=maxVal)
+    plt.colorbar(label='K Value')
+    plt.title("Porous Site Resistance, it = " + str(execTime))
+    name = directory + "/clot_FF_it=" + str(execTime)
+
+    # Saving
+    plt.savefig(name, bbox_inches="tight")
+
+    # Cleanup
+    # plt.show()
+    plt.close()
+
+# Saving variables to run simulations with an already converged system
+def saveVariables(nx , ny, viscosity, rho_initial, F_initial, K_initial, maxIter, fin, fout, rho, u):
+    # Creating variable storing directory
+    varFolder = "./Variables"
+    if not os.path.exists(varFolder):
+        os.mkdir(varFolder)
+        print("Made new variables storing directory : " + varFolder)
+
+    # File for dumping objects containing all the fluid variables for reference
+    filename = varFolder + "/branch_"+str(nx)+"x"+str(ny)+"_viscosity=" + str(viscosity) + "_Rho=" + str(rho_initial) 
+    filename += "_F=" + str(F_initial) + "_K=" + str(K_initial)
+    filename += "_it=" + str(maxIter)
+
+    # Generating the file
+    with open(filename + ".pkl", 'wb') as f:
+        pickle.dump([fin, fout, rho, u], f)
+
+# Getting saved already converged variables to start the system
+def getVariables(nx, ny, viscosity, rho_initial, F_initial, K_initial, maxIter):
+    # Get correct filename
+    varFolder = "./Variables"
+    filename = varFolder + "/branch_"+str(nx)+"x"+str(ny)+"_viscosity=" + str(viscosity) + "_Rho=" + str(rho_initial) 
+    filename += "_F=" + str(F_initial) + "_K=" + str(K_initial)
+    filename += "_it=" + str(maxIter)
+
+    # Recovering variables
+    with open(filename + ".pkl", "rb") as f:  # Python 3: open(..., 'rb')
+        fin, fout, rho, u = pickle.load(f)
+    
+    # Returning variables
+    return fin, fout, rho, u
+
+
