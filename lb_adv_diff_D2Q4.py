@@ -111,20 +111,11 @@ def bindAndDissolve(tPAin, K):
     K_tmp0 = K[0,:,:] - dissolutionAmount
     K_tmp1 = K[1,:,:] - dissolutionAmount
 
-    # 2. Check if dissolution amount exceeds K (resulting in a K < 0)
-    # isNotNegative0 = K_tmp0 >= 0
-    # isNotNegative1 = K_tmp1 >= 0
-
-    # 3. If it does, set K to 0 (= no clot, all dissolved) 
-    #    and if not, keep K value
-    # positive_K_tmp0 = where(isNotNegative0, K_tmp0, 0)
-    # positive_K_tmp1 = where(isNotNegative1, K_tmp1, 0)
-
-    # 4. Check if K<1e-7, we consider it = 0
+    # 2. Check if K < 1e-7 -> we consider it to be = 0
     isTooSmall0 = K_tmp0 > 1e-7 
     isTooSmall1 = K_tmp1 > 1e-7
 
-    # 5. Adjust accordingly
+    # 3. Adjust accordingly
     K[0,:,:] = where(isTooSmall0, K_tmp0, 0)
     K[1,:,:] = where(isTooSmall1, K_tmp1, 0)
 
@@ -187,6 +178,7 @@ fout = equilibrium(rho, vel)
 
 # Loading already converged variables for faster execution time
 fin, fout, _, u = getVariables("loop_Kxy", nx, ny, viscosity, rho_initial, F_initial, K_initial, 65000)
+
 # tPA density initialisation
 rhoTPA = zeros((nx,ny))
 rhoTPA[1:tubeSize+1,ny//2] = rhoTPA_initial
