@@ -38,7 +38,7 @@ fin, fout, _, _ = getVariables(nx, ny, viscosity, rho_initial, F_initial, K_init
 """
 
 # initialising the directories to save the output
-def createRepositories(maxIter, nx, ny, viscosity, rho_initial, F_initial, K_initial):
+def createRepositories(maxIter, nx, ny, viscosity, rho_initial, rhoTPA_initial, d, F_initial, K_initial):
 
     # Root monitoring directory
     root = "./Monitoring"
@@ -47,7 +47,9 @@ def createRepositories(maxIter, nx, ny, viscosity, rho_initial, F_initial, K_ini
         print("Made new root monitoring directory : " + root)
 
     # Main working directory for current execution
-    new_dir_monitoring = root + "/FULLMACRO_DISSOLVE_FF_branch_clean_"+str(nx)+"x"+str(ny)+"_viscosity=" + str(viscosity) + "_Rho=" + str(rho_initial) 
+    new_dir_monitoring = root + "/FF_loop_D2Q4_tPA_dissolve_"+str(nx)+"x"+str(ny)+"_viscosity=" + str(viscosity) + "_Rho=" + str(rho_initial) 
+    new_dir_monitoring += "_rhoTPA_ini=" + str(rhoTPA_initial)
+    new_dir_monitoring += "_d=" + str(d)
     new_dir_monitoring += "_F=" + str(F_initial) + "_K=" + str(K_initial)
     new_dir_monitoring += "_it=" + str(maxIter)
     if not os.path.exists(new_dir_monitoring):
@@ -71,8 +73,20 @@ def createRepositories(maxIter, nx, ny, viscosity, rho_initial, F_initial, K_ini
     if not os.path.exists(new_dir_clot_force):
         os.mkdir(new_dir_clot_force)
         print("Made new clot force directory : ", new_dir_clot_force)
+    
+    # Directory for tPA density
+    new_dir_tPA_density = new_dir_monitoring + "/tPA_Densities"
+    if not os.path.exists(new_dir_tPA_density):
+        os.mkdir(new_dir_tPA_density)
+        print("Made new clot force directory : ", new_dir_tPA_density)
 
-    return new_dir_monitoring, new_dir_clot_velocity, new_dir_velocity, new_dir_clot_force
+    # Directory for tPA flow
+    new_dir_tPA_flow = new_dir_monitoring + "/tPA_flow"
+    if not os.path.exists(new_dir_tPA_flow):
+        os.mkdir(new_dir_tPA_flow)
+        print("Made new clot force directory : ", new_dir_tPA_flow)
+
+    return new_dir_monitoring, new_dir_clot_velocity, new_dir_velocity, new_dir_clot_force, new_dir_tPA_density, new_dir_tPA_flow
 
 # Drawing a figure of the system, with velocitiy profiles sites
 def plotSystem(main_directory, nx, ny, tubeSize, bounceback, openPath, clot, pulseField):
@@ -241,12 +255,40 @@ def plotVelocityProfiles(velocity_directory, nx, ny, tubeSize, u, execTime):
     plt.close()
     plt.clf()
 
-# Visualing the current system velocity norms
+# Visualising the current system velocity norms
 def visualise(u):
-        plt.clf()
-        plt.imshow(sqrt(u[0]**2+u[1]**2).transpose(), cmap=cm.Reds)
-        plt.pause(.01)
-        plt.cla()
+    plt.clf()
+    plt.imshow(sqrt(u[0]**2+u[1]**2).transpose(), cmap=cm.Reds)
+    plt.pause(.01)
+    plt.cla()
+
+# Visualising tPA density
+def visualiseTPA(rho):
+    plt.clf()
+    plt.imshow(rho.transpose(), cmap=cm.Reds)
+    plt.pause(.01)
+    # plt.show()
+    plt.cla()
+
+# Saving the visual representation of tPA density
+def saveTPADensity(directory, rho, it):
+    plt.clf()
+    plt.imshow(rho.transpose(), cmap=cm.Reds)
+    plt.title("iteration : " + str(it))
+    name = directory + "/tPA_density_it=" + str(it)
+    plt.savefig(name, bbox_inches='tight')
+    plt.close()
+    plt.clf()
+
+# Saving the visual representation of tPA flow
+def saveTPAFlow(directory, rho, u, it):
+    plt.clf()
+    plt.imshow((rho*sqrt(u[0]**2+u[1]**2)).transpose(), cmap=cm.Reds)
+    plt.title("iteration : " + str(it))
+    name = directory + "/tPA_flow_it=" + str(it)
+    plt.savefig(name, bbox_inches='tight')
+    plt.close()
+    plt.clf()
 
 # Visualisation of the resisting forces inside the clot
 def showClotForce(directory, K_initial, K, clot, execTime):
@@ -277,7 +319,7 @@ def showClotForce(directory, K_initial, K, clot, execTime):
     plt.close()
 
 # Saving variables to run simulations with an already converged system
-def saveVariables(nx , ny, viscosity, rho_initial, F_initial, K_initial, maxIter, fin, fout, rho, u):
+def saveVariables(type, nx , ny, viscosity, rho_initial, F_initial, K_initial, maxIter, fin, fout, rho, u):
     # Creating variable storing directory
     varFolder = "./Variables"
     if not os.path.exists(varFolder):
@@ -285,7 +327,7 @@ def saveVariables(nx , ny, viscosity, rho_initial, F_initial, K_initial, maxIter
         print("Made new variables storing directory : " + varFolder)
 
     # File for dumping objects containing all the fluid variables for reference
-    filename = varFolder + "/branch_"+str(nx)+"x"+str(ny)+"_viscosity=" + str(viscosity) + "_Rho=" + str(rho_initial) 
+    filename = varFolder + "/" + type + "_"+str(nx)+"x"+str(ny)+"_viscosity=" + str(viscosity) + "_Rho=" + str(rho_initial) 
     filename += "_F=" + str(F_initial) + "_K=" + str(K_initial)
     filename += "_it=" + str(maxIter)
 
@@ -297,10 +339,10 @@ def saveVariables(nx , ny, viscosity, rho_initial, F_initial, K_initial, maxIter
     f.close()
 
 # Getting saved already converged variables to start the system
-def getVariables(nx, ny, viscosity, rho_initial, F_initial, K_initial, maxIter):
+def getVariables(type, nx, ny, viscosity, rho_initial, F_initial, K_initial, maxIter):
     # Get correct filename
     varFolder = "./Variables"
-    filename = varFolder + "/branch_"+str(nx)+"x"+str(ny)+"_viscosity=" + str(viscosity) + "_Rho=" + str(rho_initial) 
+    filename = varFolder + "/" + type + "_"+str(nx)+"x"+str(ny)+"_viscosity=" + str(viscosity) + "_Rho=" + str(rho_initial) 
     filename += "_F=" + str(F_initial) + "_K=" + str(K_initial)
     filename += "_it=" + str(maxIter)
 
@@ -315,3 +357,74 @@ def getVariables(nx, ny, viscosity, rho_initial, F_initial, K_initial, maxIter):
     return fin, fout, rho, u
 
 
+def saveDissolutionAmount(file, clot, dissolution):
+
+    rows, cols = where(clot)
+    row_start, row_end = rows.min(), rows.max() + 1
+    col_start, col_end = cols.min(), cols.max() + 1
+
+
+    file.write("\nDissolution Amount\n\n")
+    
+    for row in dissolution[row_start:row_end, col_start:col_end].transpose():
+        file.write(" ".join(map(str, row.tolist())) + "\n")
+
+def SaveTPAValues(file, before, tPAin, tPAout, K, clot, execTime):
+    rows, cols = where(clot)
+    row_start, row_end = rows.min(), rows.max() + 1
+    col_start, col_end = cols.min(), cols.max() + 1
+
+    line = "Coord : [" + str(row_start)
+    line += ":" 
+    line += str(row_end)
+    line += "," + str(col_start)
+    line += ":" + str(col_end) + "]\n"
+
+    tmpin = sum(tPAin, axis=0)
+    sumTPAin = tmpin[row_start:row_end, col_start:col_end]
+
+    tmpout= sum(tPAout, axis=0)
+    sumTPAout= tmpout[row_start:row_end, col_start:col_end]
+
+    if before:
+        file.write("Iteration : " + str(execTime) + "\n\n")
+        file.write("######## Before Dissolution : ########\n")
+        file.write(line)
+
+        file.write("\ntPAin\n\n")
+
+        for row in sumTPAin.transpose():
+            file.write(" ".join(map(str, row.tolist())) + "\n")
+                
+        file.write("\ntPAout\n\n")
+        
+        for row in sumTPAout.transpose():
+            file.write(" ".join(map(str, row.tolist())) + "\n")
+
+        file.write("\nK\n\n")
+                
+        for row in K[0,row_start:row_end, col_start:col_end].transpose():
+            file.write(" ".join(map(str, row.tolist())) + "\n")
+    
+    if not(before):
+        file.write("\n######## After Dissolution ########\n")
+        file.write("\ntPAin\n\n")
+
+        for row in sumTPAin.transpose():
+            file.write(" ".join(map(str, row.tolist())) + "\n")
+        
+        file.write("\ntPAout\n\n")
+        
+        for row in sumTPAout.transpose():
+            file.write(" ".join(map(str, row.tolist())) + "\n")
+
+        file.write("\nK\n\n")
+                
+        for row in K[0,row_start:row_end, col_start:col_end].transpose():
+            file.write(" ".join(map(str, row.tolist())) + "\n")
+
+        dotline = "\n"
+        for i in range(121): dotline+="-"
+        dotline += "\n\n"
+
+        file.write(dotline)

@@ -254,6 +254,27 @@ def showClotForce():
     plt.imshow(K[0])
     plt.show()
 
+def testConditionWhere():
+    # rhoTPA
+    A = np.array([  [1, 1, 1, 1],
+                    [1, 1, 0, 0],
+                    [1, 1, 0, 0], 
+                    [1, 1, 0, 0]])
+    # K
+    B = np.array([  [0, 0.1, 0.1, 0],
+                    [0, 0.1, 0.1, 0],
+                    [0, 0, 0, 0], 
+                    [0, 0, 0, 0]])
+    # Dissolution amout
+    C = A*B
+
+    condition = C == 0
+
+    # Unbinded tpa, D = tPAin (= do for every direction)
+    D = np.where(condition, A, 0)
+    print(C)
+    print(D)
+
 # testMatrix()
 # testMeshGrid()
 # testFull()
@@ -277,4 +298,5 @@ def showClotForce():
 # notMatTest()
 # testexepctedprofile()
 # testClotVelocities()
-showClotForce()
+# showClotForce()
+testConditionWhere()

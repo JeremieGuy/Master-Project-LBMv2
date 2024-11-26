@@ -9,7 +9,7 @@ import time
 ########################### Flow & Topology Definition #############################################
 
 # Max iterations (dt =1)
-maxIter = 900                 
+maxIter = 20000                 
 
 # System topology definition
 nx, ny = 260, 200               # Number of lattice nodes (dx = 1)
@@ -45,28 +45,6 @@ cs2 = 1/3
 #################### Main Function Definitions ######################################
 
 # Macroscopic variable computation
-# def macroscopic(fin):
-#     # density
-#     rho = zeros((nx,ny))
-#     rho[openPath] = sum(fin[:,openPath], axis=0)
-#     # velocity
-#     u = zeros((2, nx, ny))
-#     for i in range(9):
-#         u[0,openPath] += v[i,0] * fin[i,openPath]
-#         u[1,openPath] += v[i,1] * fin[i,openPath]
-#     u[:,openPath] /= rho[openPath]
-#     return rho, u
-
-# # Equilibrium distribution function (rho = array)
-# def equilibrium(rho, u):          
-#     usqr = 3/2 * (u[0,openPath]**2 + u[1,openPath]**2)
-#     feq = zeros((9,nx,ny))
-#     for i in range(9):
-#         cu = 3 * (v[i,0]*u[0,openPath] + v[i,1]*u[1,openPath])
-#         feq[i,openPath] = rho[openPath]*w[i] * (1 + cu + 0.5*cu**2 - usqr)
-#     return feq
-
-# Macroscopic variable computation
 def macroscopic(fin):
     rho = sum(fin, axis=0)
     u = zeros((2, nx, ny))
@@ -89,38 +67,12 @@ def equilibrium(rho, u):
 def addResistingClotForce(rho, u, F, K):
     FF = zeros((9,nx,ny))
     for i in range(9):
-        FF[i,:,:] = rho*(v[i,0]*(F[0,:,:] - K[0,:,:]*u[0,:,:]) + v[i,1]*F[1,:,:])
+        FF[i,:,:] = rho*(v[i,0]*(F[0,:,:] - K[0,:,:]*u[0,:,:]) + v[i,1]*(F[1,:,:] - K[1,:,:]*u[1,:,:]))
         FF[i,:,:] = FF[i,:,:] * (w[i] / cs2)
     return FF
 
 # Dissolving the clot proportionnaly to the flow
-def dissolveClot(rho, u, K, clot):
 
-    # Determining norm of the velocity
-    u_norm = sqrt(u[0]**2+u[1]**2)
-
-    # Computing flow
-    flow = rho*u_norm
-    
-    # Computing amount of dissolution 
-    dissolution1 = d*K[0,clot]*flow[clot]
-    dissolution2 = d*K[1,clot]*flow[clot]
-
-    # Calculating the resulting K values
-    K_tmp1 = K[0,clot] - dissolution1
-    K_tmp2 = K[0,clot] - dissolution2
-
-    # Assessing if dissolution is > 0 -> if not set value to 0
-    condition1 = K_tmp1 > 0  # Create a boolean mask
-    condition2 = K_tmp2 > 0
-    filtered_K_tmp1 = where(condition1, K_tmp1, 0) # Check if value validates condition
-    filtered_K_tmp2 = where(condition2, K_tmp2, 0) # else replace by 0
-
-    # Updating the dissolved K
-    K[0, clot] =  filtered_K_tmp1
-    K[1, clot] =  filtered_K_tmp2
-
-    return K
 
 ################################## Masks ####################################
 
@@ -132,8 +84,8 @@ bounceback[0,:] = True                              # Left border
 bounceback[nx-1,:] = True                           # Right border
 bounceback[tubeSize+1:(nx-1-tubeSize),              
            tubeSize+1:(ny-1-tubeSize)] = True       # Obstacle
-bounceback[tubeSize+1:(nx-1-tubeSize),
-           1+2*tubeSize+1:1+3*tubeSize+1] = False   # Branch
+# bounceback[tubeSize+1:(nx-1-tubeSize),
+#            1+2*tubeSize+1:1+3*tubeSize+1] = False   # Branch
 
 # Open path mask
 openPath = invert(bounceback)
@@ -174,7 +126,7 @@ fin = equilibrium(rho, vel)
 fout = equilibrium(rho, vel)
 
 # Loading already converged variables for faster execution time
-fin, fout, _, _ = getVariables(nx, ny, viscosity, rho_initial, F_initial, K_initial, 60000)
+# fin, fout, _, _ = getVariables(nx, ny, viscosity, rho_initial, F_initial, K_initial, 60000)
 
 ################################# Main time loop ######################################
 
@@ -212,12 +164,12 @@ for execTime in range(maxIter):
     fin[8,:,:] = roll(roll(fout[8,:,:],-1,axis=0),-1,axis=1)    # i = 8
 
     # Velocity visualisation
-    if (execTime%10==0):
+    # if (execTime%10==0):
         # visualise(u)
-        showClotForce(clotForceDirectory, K_initial, K, clot, execTime)
+        # showClotForce(clotForceDirectory, K_initial, K, clot, execTime)
     
     # Clot dissolution step
-    K = dissolveClot(rho, u, K, clot)
+    # K = dissolveClot(rho, u, K, clot)
     
     # Clot velocity and velocity profiles graphics generation
     # if(execTime%1000==0):
@@ -241,4 +193,4 @@ plotVelocityProfiles(velocityDirectory, nx, ny, tubeSize, u, maxIter)
 ########################### Converged System Saving ############################# 
 
 # Saving converged system to load directly at next run
-# saveVariables(nx, ny, viscosity, rho_initial, F_initial, K_initial, maxIter, fin, fout, rho, u)
+saveVariables(nx, ny, viscosity, rho_initial, F_initial, K_initial, maxIter, fin, fout, rho, u)
