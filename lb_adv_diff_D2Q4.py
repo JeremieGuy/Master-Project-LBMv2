@@ -3,189 +3,128 @@
 # inspired by Jonas Latt
 
 from numpy import *
-from functions import *
+from functionsLB import *
+from functionsMonitoring import *
 import time
 
+########################## Data Load & Save ###########################################
+loadData = True
+saveData = False
+
 ########################### Flow & Topology Definition #############################################
-
-# Max iterations (dt =1)
-maxIter = 40000                 
-
 # System topology definition
-nx, ny = 260, 200               # Number of lattice nodes (dx = 1)
-tubeSize = 21                   # Diameters of the tubes in the system
+class Lattice:
+    maxIter = 65000                # Max iterations (dt =1)            
+    nx, ny = 260, 200               # Number of lattice nodes (dx = 1)
+    tubeSize = 21                   # Diameters of the tubes in the system
+    branch = True                  # Determins if the system is a loop or with a colateral branch
 
-# Fluid variables
-viscosity = 0.01                # Kinematic viscosity
-omega = 1 / (3*viscosity+0.5);  # Relaxation parameter
-rho_initial = 2.5               # Inital density of the system
+# Fluid definition
+class Fluid:
+    viscosity = 0.01                # Kinematic viscosity
+    omega = 1 / (3*viscosity+0.5);  # Relaxation parameter
+    rho_initial = 2.5               # Inital density of the system
+    F_initial = [0,-0.0001]         # Accelerating force F[nx,ny]
+    
+# Clot definition
+class Clot:
+    K_initial = [0.001,0.001]       # Initial resisting force of porous region K[2,nx,ny]
+    clotSize = 20                   # Size of the clot lenghtwise in a tube section
+    coord = [Lattice.nx//2-clotSize//2, Lattice.nx//2+clotSize//2] # Clot coordinates
+    d = 1                           # Clot dissolving rate
+    gamma = 0                    # binding proportion
 
-# Forces
-F_initial = [0,-0.0001]         # Accelerating force F[nx,ny]
-K_initial = [0.001,0.001]       # Initial resisting force of porous region K[2,nx,ny]
-
-# Clot
-clotSize = 20                   # Size of the clot lenghtwise in a tube section
-clotCoord = [nx//2-clotSize//2, 
-             nx//2+clotSize//2] # Clot coordinates
-d = 1                           # Clot dissolving rate
-rhoTPA_initial = 1              # tPA added concentration
+# tPA definition
+class TPA:
+    rho_initial = 1              # tPA added concentration
 
 ########################## Lattice Constants ###########################################
 
-# Velocity directions vectors, D2Q9
-v = array([ [ 1,  1], [ 1,  0], [ 1, -1], [ 0,  1], [ 0,  0],
-            [ 0, -1], [-1,  1], [-1,  0], [-1, -1] ])
+class D2Q9:
+    # Velocity directions vectors, D2Q9
+    v = array([ [ 1,  1], [ 1,  0], [ 1, -1], [ 0,  1], [ 0,  0],
+        [ 0, -1], [-1,  1], [-1,  0], [-1, -1] ]) 
+    # Directionnal weights, D2Q9
+    w = array([1/36, 1/9, 1/36, 1/9, 4/9, 1/9, 1/36, 1/9, 1/36]) 
+    # Fluid sound velocity adapted to lattice units
+    cs2 = 1/3                          
 
-# Directionnal weights, D2Q9
-w = array([1/36, 1/9, 1/36, 1/9, 4/9, 1/9, 1/36, 1/9, 1/36])
-
-# Velocity directions vector for tPA, D2Q4
-v_tPA = array([[ 1, 0], [ 0, 1], [ 0, -1], [ -1, 0]])
-
-# Directionnal weighta for tPA, D2Q4
-w_tPA = array([1/4, 1/4, 1/4, 1/4])
-
-# Sound velocity adapted to lattice units   
-cs2 = 1/3                       
-
-#################### Main Function Definitions ######################################
-
-# Macroscopic variable computation
-def macroscopic(fin):
-    rho = sum(fin, axis=0)
-    u = zeros((2, nx, ny))
-    for i in range(9):
-        u[0,:,:] += v[i,0] * fin[i,:,:]
-        u[1,:,:] += v[i,1] * fin[i,:,:]
-    u /= rho
-    return rho, u
-
-# Equilibrium distribution function
-def equilibrium(rho, u): 
-    usqr = 3/2 * (u[0]**2 + u[1]**2)
-    feq = zeros((9,nx,ny))
-    for i in range(9):
-        cu = 3 * (v[i,0]*u[0,:,:] + v[i,1]*u[1,:,:])
-        feq[i,:,:] = rho*w[i] * (1 + cu + 0.5*cu**2 - usqr)
-    return feq
-
-# Macroscopic variable computation for tPA (only rho)
-def macroscopicTPA(tPAin):
-    rhoTPA = sum(tPAin, axis=0)
-    return rhoTPA
-
-# Equilibrium distribution function
-def equilibriumTPA(rhoTPA, u):
-    tPAeq = zeros((4,nx,ny))
-    for i in range(4):
-        vu = v_tPA[i,0]*u[0,:,:] + v_tPA[i,1]*u[1,:,:]
-        tPAeq[i,:,:] = w_tPA[i]*rhoTPA*(1 + (1/cs2)*vu)
-    return tPAeq
-
-# Acceleration field force definition and porous region counter-field
-def addResistingClotForce(rho, u, F, K):
-    FF = zeros((9,nx,ny))
-    for i in range(9):
-        FF[i,:,:] = rho*(v[i,0]*(F[0,:,:] - K[0,:,:]*u[0,:,:]) + v[i,1]*(F[1,:,:] - K[1,:,:]*u[1,:,:]))
-        FF[i,:,:] = FF[i,:,:] * (w[i] / cs2)
-    return FF
-
-# Dissolving the clot proportionnaly to tPA amount
-def bindAndDissolve(tPAin, K):
-    #Compute the total amount of population in tPAin
-    sumTPAin = sum(tPAin, axis=0)
-
-    # Compute the dissolution amount (not : k[0] and K[1] change in the same way)
-    dissolutionAmount = sumTPAin*K[0,:,:]*d
-    
-    # Check if each site has had dissolution ...
-    hasDissolved = dissolutionAmount == 0
-
-    # ... and remove tPAin accordingly
-    for i in range(4):
-        tPAin[i,:,:] = where(hasDissolved, tPAin[i,:,:], 0)
-
-    # Dissolving the clot : 
-    # 1. Start by applying dissolution
-    K_tmp0 = K[0,:,:] - dissolutionAmount
-    K_tmp1 = K[1,:,:] - dissolutionAmount
-
-    # 2. Check if K < 1e-7 -> we consider it to be = 0
-    isTooSmall0 = K_tmp0 > 1e-7 
-    isTooSmall1 = K_tmp1 > 1e-7
-
-    # 3. Adjust accordingly
-    K[0,:,:] = where(isTooSmall0, K_tmp0, 0)
-    K[1,:,:] = where(isTooSmall1, K_tmp1, 0)
-
-    # Return new tPA population and new clot value
-    return tPAin, K
+class D2Q4:
+    # Velocity directions vector for tPA, D2Q4
+    v = array([[ 1, 0], [ 0, 1], [ 0, -1], [ -1, 0]])
+    # Directionnal weighta for tPA, D2Q4
+    w = array([1/4, 1/4, 1/4, 1/4])
+    # tPA sound velocity adapted to lattice units
+    cs2 = 1/2                                    
 
 ################################## Masks ####################################
 
-# Bounceback nodes mask
-bounceback = full((nx,ny),False)
-bounceback[:,0] = True                              # Top border
-bounceback[:,ny-1] = True                           # Bottom border
-bounceback[0,:] = True                              # Left border
-bounceback[nx-1,:] = True                           # Right border
-bounceback[tubeSize+1:(nx-1-tubeSize),              
-           tubeSize+1:(ny-1-tubeSize)] = True       # Obstacle
-# bounceback[tubeSize+1:(nx-1-tubeSize),
-#            1+2*tubeSize+1:1+3*tubeSize+1] = False   # Branch
+# Bounceback nodes mask (Loop = False, Branch = True)
+bounceback = generateBouncebackMask(Lattice)
 
 # Open path mask
 openPath = invert(bounceback)
 
 # Clot mask for clot in the upper tube
-clot = full((nx,ny),False)
-clot[clotCoord[0]:clotCoord[1]+1,1:1+tubeSize] = True
+clotMask = generateClotMask(Lattice, Clot)
 
-displayTEST = full((nx,ny),False)
-displayTEST[clotCoord[0]-3:clotCoord[1]+1-15,1:1+tubeSize] = True
+# Force array resistance for porous region
+K = generateK(Lattice, Clot, clotMask)
 
-# Force array resistance mask for porous region
-K = zeros((2,nx,ny))
-K[0,clot] = K_initial[0]
-K[1,clot] = K_initial[1]
+# Clot remaing values mask
+KMask = getKMask(Lattice, K)
 
 # Pulsing field for fluid aceleration in the lower left tube section
-pulseField = full((nx,ny),False)
-pulseField[1:tubeSize+1,(ny//2-10):(ny//2+11)] = True
+pulseField = generatePulseFieldMask(Lattice)
 
-# Accelerating force mask
-F = zeros((2,nx,ny))
-F[0,pulseField] = F_initial[0]
-F[1,pulseField] = F_initial[1]
+# Accelerating force values
+F = zeros((2,Lattice.nx, Lattice.ny))
+F[0,pulseField] = Fluid.F_initial[0]
+F[1,pulseField] = Fluid.F_initial[1]
 
 ##################### Initialising Output Monitoring Functions #####################
+class Directory:
+    clotVel = True
+    vel = True
+    clot = True
+    tpaRho = False
+    tpaFlow = True
+    tpaConcentration = True
+    clotLeft = True
 
 # Generating working directories
-mainDirectory, clotDirectory, velocityDirectory, clotForceDirectory, tPADensityDirectory, tPAFlowDirectory = createRepositories(maxIter,nx,ny,viscosity,rho_initial, rhoTPA_initial, d, F_initial,K_initial)
+mainDir, clotVelDir, velDir, clotDir, tpaRhoDir, tPAFlowDir, tPAConcDir, clotLeftDir = createRepositories(Lattice, Fluid, Clot, TPA, Directory)
+
+# Defining output variables
+KLeftMost = []
+
+if Lattice.branch:
+    GeometryType = "branch"
+else:
+    GeometryType = "loop"
 
 ############################# System Initliaization #################################
 
 # Velocity initialisation
-vel = zeros((2,nx,ny))
+vel = zeros((2,Lattice.nx, Lattice.ny))
 
 # Density initialisation
-rho = full((nx,ny),rho_initial)
+rho = full((Lattice.nx, Lattice.ny), Fluid.rho_initial)
 
 # Initialisation of the populations at equilibrium with the given density & velocity.
-fin = equilibrium(rho, vel)
-fout = equilibrium(rho, vel)
+fin = equilibrium(rho, vel, Lattice, D2Q9)
+fout = equilibrium(rho, vel, Lattice, D2Q9)
 
 # Loading already converged variables for faster execution time
-fin, fout, _, u = getVariables("loop_Kxy", nx, ny, viscosity, rho_initial, F_initial, K_initial, 65000)
+if loadData: fin, fout, _, u = getVariables(GeometryType, Lattice, Fluid, Clot, 65000)
 
 # tPA density initialisation
-rhoTPA = zeros((nx,ny))
-rhoTPA[1:tubeSize+1,ny//2] = rhoTPA_initial
+rhoTPA = zeros((Lattice.nx, Lattice.ny))
+rhoTPA[1:Lattice.tubeSize+1, Lattice.ny//2] = TPA.rho_initial
 
 # tPA population initialisation
-tPAin = equilibriumTPA(rhoTPA, u)
-tPAout = equilibriumTPA(rhoTPA, u)
+tPAin = equilibriumTPA(rhoTPA, u, Lattice, D2Q4)
+tPAout = equilibriumTPA(rhoTPA, u, Lattice, D2Q4)
 
 ################################# Main time loop ######################################
 
@@ -193,31 +132,35 @@ tPAout = equilibriumTPA(rhoTPA, u)
 start_time = time.time()
 
 # main loop
-for execTime in range(maxIter):
+for execTime in range(Lattice.maxIter):
 
     # Compute macroscopic variables, density and velocity.
-    rho, u = macroscopic(fin)       # fluid 
+    rho, u = macroscopic(fin, Lattice, D2Q9)       # fluid 
     rhoTPA = macroscopicTPA(tPAin)  # tPA 
 
     # injecting tPA constantly
-    rhoTPA[1:tubeSize+1,ny//2] = rhoTPA_initial
+    rhoTPA[1:Lattice.tubeSize+1, Lattice.ny//2] = Fluid.rho_initial
 
     # Compute equilibrium.
-    feq = equilibrium(rho, u)           # fluid
-    tPAeq = equilibriumTPA(rhoTPA, u)   # tPA
+    feq = equilibrium(rho, u, Lattice, D2Q9)           # fluid
+    tPAeq = equilibriumTPA(rhoTPA, u, Lattice, D2Q4)   # tPA
 
     # BGK collision step for open path
-    fout[:,openPath] = fin[:,openPath] - omega * (fin[:,openPath] - feq[:,openPath])            # fluid
-    tPAout[:,openPath] = tPAin[:,openPath] - omega * (tPAin[:,openPath] - tPAeq[:,openPath])    # tPA
-
+    fout[:,openPath] = fin[:,openPath] - Fluid.omega * (fin[:,openPath] - feq[:,openPath])            # fluid
+    # tPA BGK collision : only where there is no K
+    openPathNoK = where(KMask==False, openPath, False)
+    tPAout[:,openPathNoK] = tPAin[:,openPathNoK] - Fluid.omega * (tPAin[:,openPathNoK] - tPAeq[:,openPathNoK])    # tPA
+    
     # Bounce-back condition 
     for i in range(9):                                  # fluid
         fout[i, bounceback] = fin[8-i, bounceback]
     for i in range(4):                                  # tPA
         tPAout[i, bounceback] = tPAin[3-i, bounceback]
-    
+    for i in range(4):                                  # Partial tPA bounceback on K nodes
+        tPAout[i, KMask] = tPAin[3-i, KMask]
+
     # Force field injection
-    fout += addResistingClotForce(rho, u, F, K)
+    fout += addResistingClotForce(rho, u, F, K, Lattice, D2Q9)
     
     # Streaming step for fluid in every direction i=0:8
     fin[0,:,:] = roll(roll(fout[0,:,:],1,axis=0),1,axis=1)      # i = 0
@@ -231,21 +174,39 @@ for execTime in range(maxIter):
     fin[8,:,:] = roll(roll(fout[8,:,:],-1,axis=0),-1,axis=1)    # i = 8
 
     # Streaming step for tPA in every direction i=0:4
-    tPAin[0,:,:] = roll(tPAout[0,:,:],1,axis=0)                     # i = 0
-    tPAin[1,:,:] = roll(tPAout[1,:,:],1,axis=1)                     # i = 1
-    tPAin[2,:,:] = roll(tPAout[2,:,:],-1,axis=1)                    # i = 2
-    tPAin[3,:,:] = roll(tPAout[3,:,:],-1,axis=0)                    # i = 3
+    tPAin[0,:,:] = roll(tPAout[0,:,:],1,axis=0)                 # i = 0
+    tPAin[1,:,:] = roll(tPAout[1,:,:],1,axis=1)                 # i = 1
+    tPAin[2,:,:] = roll(tPAout[2,:,:],-1,axis=1)                # i = 2
+    tPAin[3,:,:] = roll(tPAout[3,:,:],-1,axis=0)                # i = 3
+
+    # Bind tPA to clot fribrin
+    tPABind, tPAin = bindTPA(Lattice, Clot, K, tPAin, KMask)
 
     # Dissolve clot
-    tPAin, K = bindAndDissolve(tPAin, K)
+    K = dissolveClot(Clot, tPABind, K)
 
-    if (execTime%250==0 and 8000<execTime<36000):
-        saveTPADensity(tPADensityDirectory, rhoTPA, execTime)
-        showClotForce(clotForceDirectory, K_initial, K, clot, execTime)
-        saveTPAFlow(tPAFlowDirectory, rhoTPA, u, execTime)
+    # Update K mask
+    KMask = getKMask(Lattice, K)
+
+    # if (execTime%250==0):
+    #     # saveTPADensity(tPARhoDir, rhoTPA, execTime)
+    #     showClotForce(clotDir, Clot, K, clotMask, execTime)
+    #     saveTPAFlow(tPAFlowDir, rhoTPA, u, execTime)
     
+    if (execTime%1000==0):
+        plotResults(clotVelDir, Lattice, Clot, u, rho, bounceback, execTime)
+        plotVelocityProfiles(velDir, Lattice, u, execTime)
+        plotTPAConcentration(tPAConcDir, Lattice, Clot, tPAin, K, bounceback, execTime)
+        showClotForce(clotDir, Clot, K, clotMask, execTime)
+        saveTPAFlow(tPAFlowDir, rhoTPA, u, execTime)
+
+    
+    if(execTime%100==0):
+        KLeftMost.append(leftMostK(K, Clot, clotMask))
+
     # Displaying current progress
-    print("iteration : " + str(execTime) + "/" + str(maxIter), end="\r")
+    print("iteration : " + str(execTime) + "/" + str(Lattice.maxIter), end="\r")
+    
 
 # Final execution time
 end_time = time.time()
@@ -253,11 +214,13 @@ print("Execution time : " + str(end_time-start_time) + " [s]")
 
 ######################## Final Iteration Monitoring ########################## 
 
-# Final Clot velocity and velocity profiles graphics generation
-plotResults(clotDirectory, nx, tubeSize, clotCoord, u, rho, maxIter)
-plotVelocityProfiles(velocityDirectory, nx, ny, tubeSize, u, maxIter)
+# Final graphics generation
+plotKLeftMost(mainDir, KLeftMost, Lattice, Clot)
+plotTPAConcentration(tPAConcDir, Lattice, Clot, tPAin, K, bounceback, execTime+1)
+plotResults(clotVelDir, Lattice, Clot, u, rho, bounceback, Lattice.maxIter)
+plotVelocityProfiles(velDir, Lattice, u, Lattice.maxIter)
 
 ########################### Converged System Saving ############################# 
 
 # Saving converged system to load directly at next run
-# saveVariables("loop_Kxy", nx, ny, viscosity, rho_initial, F_initial, K_initial, maxIter, fin, fout, rho, u)
+if saveData : saveVariables(GeometryType, Lattice, Fluid, Clot, fin, fout, rho, u)

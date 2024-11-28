@@ -275,6 +275,45 @@ def testConditionWhere():
     print(C)
     print(D)
 
+def leftmost():
+    a = np.array([[0, 0, 1, 1, 1, 1, 1, 1, 1, 1],
+                  [0, 0, 1, 1, 1, 1, 1, 1, 1, 1],
+                  [0, 0, 0, 1, 1, 1, 1, 1, 1, 1],
+                  [0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
+                  [0, 0, 0, 0, 0, 1, 1, 1, 1, 1],
+                  [0, 0, 0, 0, 0, 1, 1, 1, 1, 1],
+                  [0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
+                  [0, 0, 0, 1, 1, 1, 1, 1, 1, 1],
+                  [0, 0, 1, 1, 1, 1, 1, 1, 1, 1],
+                  [0, 0, 1, 1, 1, 1, 1, 1, 1, 1],])
+    
+    meantest = np.mean(a, axis=0)
+    
+    K = 1
+    threshold = 0.1 * K
+
+    index = np.argmax(meantest > threshold)
+
+    print(f"Index: {index}")
+
+
+    # if (execTime%100==0 and 13000<execTime):
+    #     rows, cols = where(clotMask)
+    #     row_start, row_end = rows.min(), rows.max() + 1
+    #     col_start, col_end = cols.min(), cols.max() + 1
+    #     # print(row_start)
+    #     # print(row_end)
+    #     # print(col_start)
+    #     # print(col_end)
+    #     plt.clf()
+    #     tmp1 = sum(tPABind, axis=0)
+    #     tmp2 = tmp1[row_start:row_end, col_start:col_end]
+    #     # print(tmp2.shape)
+    #     im0= plt.imshow(tmp2.transpose(), cmap=cm.Reds)
+    #     plt.colorbar(im0, orientation='vertical', label="Velocity [m/s]", pad=0.02)
+    #     plt.pause(.01)
+    #     plt.cla()
+
 # testMatrix()
 # testMeshGrid()
 # testFull()
@@ -299,4 +338,5 @@ def testConditionWhere():
 # testexepctedprofile()
 # testClotVelocities()
 # showClotForce()
-testConditionWhere()
+# testConditionWhere()
+leftmost()
