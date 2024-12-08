@@ -1,4 +1,5 @@
 from numpy import *
+from functionsMonitoring import saveKValues
 
 #################### Main Function Definitions ######################################
 
@@ -42,40 +43,8 @@ def addResistingClotForce(rho, u, F, K, lattice, d2q9):
         FF[i,:,:] = FF[i,:,:] * (d2q9.w[i] / d2q9.cs2)
     return FF
 
-# Dissolving the clot proportionnaly to tPA amount
-def bindAndDissolve(tPAin, K, clot):
-    #Compute the total amount of population in tPAin
-    sumTPAin = sum(tPAin, axis=0)
-
-    # Compute the dissolution amount (not : k[0] and K[1] change in the same way)
-    dissolutionAmount = sumTPAin*K[0,:,:]*clot.d
-    
-    # Check if each site has had dissolution ...
-    hasDissolved = dissolutionAmount == 0
-
-    # ... and remove tPAin accordingly
-    for i in range(4):
-        tPAin[i,:,:] = where(hasDissolved, tPAin[i,:,:], 0)
-
-    # Dissolving the clot : 
-    # 1. Start by applying dissolution
-    K_tmp0 = K[0,:,:] - dissolutionAmount
-    K_tmp1 = K[1,:,:] - dissolutionAmount
-
-    # 2. Check if K < 1e-7 -> we consider it to be = 0
-    isTooSmall0 = K_tmp0 > 1e-7 
-    isTooSmall1 = K_tmp1 > 1e-7
-
-    # 3. Adjust accordingly
-    K[0,:,:] = where(isTooSmall0, K_tmp0, 0)
-    K[1,:,:] = where(isTooSmall1, K_tmp1, 0)
-
-    # Return new tPA population and new clot value
-    return tPAin, K
-
 # Compute where in the lattice K is not null
 def getKMask(lattice, K):
-
     # Initialise mask
     KMask = full((lattice.nx, lattice.ny), False)
 
@@ -88,24 +57,22 @@ def getKMask(lattice, K):
     return KMask
 
 # Binding tPA to fibrin with a gamma factor
-def bindTPA(lattice, clot, K, tPAin, KMask):
-    tPABind = zeros((4,lattice.nx, lattice.ny))
-
+def bindTPA(lattice, clot, K, tPAin, tPABind, KMask):
     # Get binded tPA portion
     for i in range(4):
-        tPABind[i,KMask] = clot.gamma*tPAin[i,KMask]
+        tPABind[i,KMask] += clot.gamma*tPAin[i,KMask]
 
     # Calculate remaining free tPA
     tPAin = tPAin - tPABind
 
     return tPABind, tPAin
 
-def dissolveClot(clot, tPABind, K):
+def dissolveClot(clot, tPABind, tPAin, K, tPA, execTime, file, clotMask):
     #Compute the total amount of population in tPAin
     sumTPABind = sum(tPABind, axis=0)
 
     # Compute the dissolution amount (not : k[0] and K[1] change in the same way)
-    dissolutionAmount = sumTPABind*K[0,:,:]*clot.d
+    dissolutionAmount = abs(sumTPABind*tPA.r*K[0,:,:]*clot.d)
 
     # Dissolving the clot : 
     # 1. Start by applying dissolution
@@ -120,11 +87,23 @@ def dissolveClot(clot, tPABind, K):
     K[0,:,:] = where(isTooSmall0, K_tmp0, 0)
     K[1,:,:] = where(isTooSmall1, K_tmp1, 0)
 
+    # 4. Update tPABind quantities
+    for i in range(4):
+        tPABind[i,:,:] -= tPABind[i,:,:]*tPA.r
+
     # Return new tPA population and new clot value
-    return K
+    return K, tPABind
 
+# Removing binded tPA where the clot has been dissolved
+def liberateTPA(tPABind, KMask):
+    # Create mask of empty K
+    emptyK = invert(KMask)
 
+    # set binded tPA to 0 where there is no clot K
+    for i in range(4):
+        tPABind[i,emptyK] = 0
 
+    return tPABind
 
 ################################## Masks Functions ####################################
 
@@ -133,6 +112,7 @@ def generateBouncebackMask(lattice):
     nx = lattice.nx
     ny = lattice.ny
     tubeSize = lattice.tubeSize
+    branchSize = lattice.branchSize
 
     bounceback = full((nx, ny),False)
     bounceback[:,0] = True                              # Top border
@@ -144,7 +124,8 @@ def generateBouncebackMask(lattice):
     
     if lattice.branch:
         bounceback[tubeSize+1:(nx-1-tubeSize),
-            1+2*tubeSize+1:1+3*tubeSize+1] = False   # Branch
+            # 1+2*tubeSize+1:1+3*tubeSize+1] = False   # Branch
+            1+2*tubeSize+1:1+2*tubeSize+1 + branchSize] = False   # Branch
     
     return bounceback
 

@@ -14,10 +14,11 @@ saveData = False
 ########################### Flow & Topology Definition #############################################
 # System topology definition
 class Lattice:
-    maxIter = 65000                # Max iterations (dt =1)            
+    maxIter = 110000               # Max iterations (dt =1)            
     nx, ny = 260, 200               # Number of lattice nodes (dx = 1)
     tubeSize = 21                   # Diameters of the tubes in the system
     branch = True                  # Determins if the system is a loop or with a colateral branch
+    branchSize = 31                 # Sets the width of the colateral branch
 
 # Fluid definition
 class Fluid:
@@ -32,11 +33,12 @@ class Clot:
     clotSize = 20                   # Size of the clot lenghtwise in a tube section
     coord = [Lattice.nx//2-clotSize//2, Lattice.nx//2+clotSize//2] # Clot coordinates
     d = 1                           # Clot dissolving rate
-    gamma = 0                    # binding proportion
+    gamma = 0.5                       # binding proportion
 
 # tPA definition
 class TPA:
-    rho_initial = 1              # tPA added concentration
+    rho_initial = 1                 # tPA added concentration
+    r = 0.8                           # tPA reaction proportion
 
 ########################## Lattice Constants ###########################################
 
@@ -79,11 +81,11 @@ pulseField = generatePulseFieldMask(Lattice)
 
 # Accelerating force values
 F = zeros((2,Lattice.nx, Lattice.ny))
-F[0,pulseField] = Fluid.F_initial[0]
+F[0,pulseField] = Fluid.F_initial[0] 
 F[1,pulseField] = Fluid.F_initial[1]
 
 ##################### Initialising Output Monitoring Functions #####################
-class Directory:
+class DirectoryGen:
     clotVel = True
     vel = True
     clot = True
@@ -93,16 +95,20 @@ class Directory:
     clotLeft = True
 
 # Generating working directories
-mainDir, clotVelDir, velDir, clotDir, tpaRhoDir, tPAFlowDir, tPAConcDir, clotLeftDir = createRepositories(Lattice, Fluid, Clot, TPA, Directory)
+Directories = createRepositories(Lattice, Fluid, Clot, TPA, DirectoryGen)
 
 # Defining output variables
 KLeftMost = []
+KLeftMostIt = []
 
 if Lattice.branch:
-    GeometryType = "branch"
+    GeometryType = "branch=" + str(Lattice.branchSize) 
 else:
     GeometryType = "loop"
 
+plotSystem(Directories.mainDir, Lattice, bounceback, openPath, clotMask, pulseField)
+
+kfile = open(Directories.mainDir + "/kvalues.txt", 'w')
 ############################# System Initliaization #################################
 
 # Velocity initialisation
@@ -126,6 +132,9 @@ rhoTPA[1:Lattice.tubeSize+1, Lattice.ny//2] = TPA.rho_initial
 tPAin = equilibriumTPA(rhoTPA, u, Lattice, D2Q4)
 tPAout = equilibriumTPA(rhoTPA, u, Lattice, D2Q4)
 
+# tPA binded
+tPABind = zeros((4,Lattice.nx, Lattice.ny))
+
 ################################# Main time loop ######################################
 
 # Monitoring execution time
@@ -135,8 +144,8 @@ start_time = time.time()
 for execTime in range(Lattice.maxIter):
 
     # Compute macroscopic variables, density and velocity.
-    rho, u = macroscopic(fin, Lattice, D2Q9)       # fluid 
-    rhoTPA = macroscopicTPA(tPAin)  # tPA 
+    rho, u = macroscopic(fin, Lattice, D2Q9)        # fluid 
+    rhoTPA = macroscopicTPA(tPAin)                  # tPA 
 
     # injecting tPA constantly
     rhoTPA[1:Lattice.tubeSize+1, Lattice.ny//2] = Fluid.rho_initial
@@ -145,8 +154,8 @@ for execTime in range(Lattice.maxIter):
     feq = equilibrium(rho, u, Lattice, D2Q9)           # fluid
     tPAeq = equilibriumTPA(rhoTPA, u, Lattice, D2Q4)   # tPA
 
-    # BGK collision step for open path
-    fout[:,openPath] = fin[:,openPath] - Fluid.omega * (fin[:,openPath] - feq[:,openPath])            # fluid
+    # Fluid BGK collision step for open path
+    fout[:,openPath] = fin[:,openPath] - Fluid.omega * (fin[:,openPath] - feq[:,openPath])    
     # tPA BGK collision : only where there is no K
     openPathNoK = where(KMask==False, openPath, False)
     tPAout[:,openPathNoK] = tPAin[:,openPathNoK] - Fluid.omega * (tPAin[:,openPathNoK] - tPAeq[:,openPathNoK])    # tPA
@@ -180,29 +189,30 @@ for execTime in range(Lattice.maxIter):
     tPAin[3,:,:] = roll(tPAout[3,:,:],-1,axis=0)                # i = 3
 
     # Bind tPA to clot fribrin
-    tPABind, tPAin = bindTPA(Lattice, Clot, K, tPAin, KMask)
+    tPABind, tPAin = bindTPA(Lattice, Clot, K, tPAin, tPABind, KMask)
 
     # Dissolve clot
-    K = dissolveClot(Clot, tPABind, K)
+    K, tPABind = dissolveClot(Clot, tPABind, tPAin, K, TPA, execTime, kfile, clotMask)
 
-    # Update K mask
+    # print(KMask.shape)
     KMask = getKMask(Lattice, K)
 
-    # if (execTime%250==0):
-    #     # saveTPADensity(tPARhoDir, rhoTPA, execTime)
-    #     showClotForce(clotDir, Clot, K, clotMask, execTime)
-    #     saveTPAFlow(tPAFlowDir, rhoTPA, u, execTime)
+    # liberate remaining binded tPA for empty sites
+    tPABind = liberateTPA(tPABind, KMask)
     
     if (execTime%1000==0):
-        plotResults(clotVelDir, Lattice, Clot, u, rho, bounceback, execTime)
-        plotVelocityProfiles(velDir, Lattice, u, execTime)
-        plotTPAConcentration(tPAConcDir, Lattice, Clot, tPAin, K, bounceback, execTime)
-        showClotForce(clotDir, Clot, K, clotMask, execTime)
-        saveTPAFlow(tPAFlowDir, rhoTPA, u, execTime)
+        plotResults(Directories.clotVelDir, Lattice, Clot, u, rho, bounceback, execTime)
+        plotVelocityProfiles(Directories.velDir, Lattice, u, execTime)
+        plotTPAConcentration(Directories.tPAConcDir, Lattice, Clot, tPAin, K, bounceback, execTime)
+        showClotForce(Directories.clotDir, Clot, K, clotMask, execTime)
+        saveTPAFlow(Directories.tPAFlowDir, rhoTPA, u, execTime)
 
     
     if(execTime%100==0):
-        KLeftMost.append(leftMostK(K, Clot, clotMask))
+        KLeftIndex, KMean = leftMostK(K, Clot, clotMask)
+        KLeftMost.append(KLeftIndex)
+        KLeftMostIt.append(execTime)
+        if (execTime%500==0): saveKMean(Directories.clotLeftDir, Clot, KMean, execTime)
 
     # Displaying current progress
     print("iteration : " + str(execTime) + "/" + str(Lattice.maxIter), end="\r")
@@ -215,10 +225,11 @@ print("Execution time : " + str(end_time-start_time) + " [s]")
 ######################## Final Iteration Monitoring ########################## 
 
 # Final graphics generation
-plotKLeftMost(mainDir, KLeftMost, Lattice, Clot)
-plotTPAConcentration(tPAConcDir, Lattice, Clot, tPAin, K, bounceback, execTime+1)
-plotResults(clotVelDir, Lattice, Clot, u, rho, bounceback, Lattice.maxIter)
-plotVelocityProfiles(velDir, Lattice, u, Lattice.maxIter)
+plotKLeftMost(Directories.clotLeftDir, KLeftMost, Lattice, Clot)
+plotTPAConcentration(Directories.tPAConcDir, Lattice, Clot, tPAin, K, bounceback, execTime+1)
+plotResults(Directories.clotVelDir, Lattice, Clot, u, rho, bounceback, Lattice.maxIter)
+plotVelocityProfiles(Directories.velDir, Lattice, u, Lattice.maxIter)
+saveKLefmost(Directories.clotLeftDir, KLeftMost, KLeftMostIt)
 
 ########################### Converged System Saving ############################# 
 

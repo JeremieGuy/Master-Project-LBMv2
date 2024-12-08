@@ -1,0 +1,21 @@
+Degree 1 : 
+Polynomial coefficients: [ 3.25607853e-04 -1.60286598e+01]
+Polynomial equation:  
+0.0003256 x - 16.03
+
+Degree 2 : 
+Polynomial coefficients: [ 4.37780190e-09 -3.15740125e-04  6.04020435e+00]
+Polynomial equation:            2
+4.378e-09 x - 0.0003157 x + 6.04
+
+Degree 3 : 
+Polynomial coefficients: [-3.45815269e-14  1.19770924e-08 -8.52190453e-04  1.81522120e+01]
+Polynomial equation:             3             2
+-3.458e-14 x + 1.198e-08 x - 0.0008522 x + 18.15
+
+Degree 4 : 
+Polynomial coefficients: [ 1.64178011e-19 -8.26856841e-14  1.71255518e-08 -1.09022803e-03
+  2.21571092e+01]
+Polynomial equation:            4             3             2
+1.642e-19 x - 8.269e-14 x + 1.713e-08 x - 0.00109 x + 22.16
+

@@ -5,101 +5,106 @@ from matplotlib import cm
 from matplotlib.colors import ListedColormap
 import os
 import pickle
+import csv
 
 
 # initialising the directories to save the output
 def createRepositories(lattice, fluid, clot, tpa, Dir):
 
     # Root monitoring directory
-    root = "./Monitoring"
-    if not os.path.exists(root):
-        os.mkdir(root)
-        print("Made new root monitoring directory : " + root)
+    rootDir = "./Monitoring"
+    if not os.path.exists(rootDir):
+        os.mkdir(rootDir)
+        print("Made new root monitoring directory : " + rootDir)
 
     # Main working directory for current execution
-    mainDir = root + "/FF"
+    mainDirTmp = rootDir + "/FF"
     if lattice.branch:
-        txt = "_branch"
+        txt = "_branch=" + str(lattice.branchSize)
     else :
         txt = "_loop"
-    mainDir += txt
-    mainDir += "_PBB_"
-    mainDir += "_viscosity=" + str(fluid.viscosity) + "_Rho=" + str(fluid.rho_initial) 
-    mainDir += "_rhoTPA=" + str(tpa.rho_initial)
-    mainDir += "_d=" + str(clot.d)
-    mainDir += "_g=" + str(clot.gamma)
-    mainDir += "_F=" + str(fluid.F_initial) + "_K=" + str(clot.K_initial)
-    mainDir += "_it=" + str(lattice.maxIter)
-    if not os.path.exists(mainDir):
-        os.mkdir(mainDir)
-        print("Made new main monitoring directory : " + mainDir)
+    mainDirTmp += txt
+    mainDirTmp += "_PBB_"
+    mainDirTmp += "_viscosity=" + str(fluid.viscosity) + "_Rho=" + str(fluid.rho_initial) 
+    mainDirTmp += "_rhoTPA=" + str(tpa.rho_initial)
+    mainDirTmp += "_d=" + str(clot.d)
+    mainDirTmp += "_g=" + str(clot.gamma)
+    mainDirTmp += "_F=" + str(fluid.F_initial) + "_K=" + str(clot.K_initial)
+    mainDirTmp += "_it=" + str(lattice.maxIter)
+    if not os.path.exists(mainDirTmp):
+        os.mkdir(mainDirTmp)
+        print("Made new main monitoring directory : " + mainDirTmp)
 
     # Directory initialisation
-    clotVelDir = ""
-    velDir = ""
-    clotDir = ""
-    tpaRhoDir = ""
-    tpaFlowDir = ""
-    tpaConcentrationDir = ""
-    clotLeftDir = ""
+    class Directories:
+        root = rootDir
+        mainDir = mainDirTmp
+        clotVelDir = "" 
+        velDir = ""
+        clotDir = ""
+        tPARhoDir = ""
+        tPAFlowDir = ""
+        tPAConcDir = ""
+        clotLeftDir = ""
 
     # Directory for clot velocity visualisation
     if Dir.clotVel:
-        clotVelDir = mainDir + "/Clot_Velocity"
-        if not os.path.exists(clotVelDir):
-            os.mkdir(clotVelDir)
-            print("Made new clot velocity directory : " + clotVelDir)
+        Directories.clotVelDir = Directories.mainDir + "/Clot_Velocity"
+        if not os.path.exists(Directories.clotVelDir):
+            os.mkdir(Directories.clotVelDir)
+            print("Made new clot velocity directory : " + Directories.clotVelDir)
 
     # Directory for velocity profiles visualisation
     if Dir.vel:
-        velDir = mainDir + "/Velocity_profiles"
-        if not os.path.exists(velDir):
-            os.mkdir(velDir)
-            print("Made new velocity profile directory : " + velDir)
+        Directories.velDir = Directories.mainDir + "/Velocity_profiles"
+        if not os.path.exists(Directories.velDir):
+            os.mkdir(Directories.velDir)
+            print("Made new velocity profile directory : " + Directories.velDir)
 
     # Directory for clot force rates
     if Dir.clot:
-        clotDir = mainDir + "/Clot_force"
-        if not os.path.exists(clotDir):
-            os.mkdir(clotDir)
-            print("Made new clot force directory : ", clotDir)
+        Directories.clotDir = Directories.mainDir + "/Clot_force"
+        if not os.path.exists(Directories.clotDir):
+            os.mkdir(Directories.clotDir)
+            print("Made new clot force directory : ", Directories.clotDir)
     
     # Directory for tPA density
     if Dir.tpaRho:
-        tpaRhoDir = mainDir + "/tPA_Densities"
-        if not os.path.exists(tpaRhoDir):
-            os.mkdir(tpaRhoDir)
-            print("Made new clot force directory : ", tpaRhoDir)
+        Directories.tPARhoDir = Directories.mainDir + "/tPA_Densities"
+        if not os.path.exists(Directories.tPARhoDir):
+            os.mkdir(Directories.tPARhoDir)
+            print("Made new tPA density directory : ", Directories.tPARhoDir)
 
     # Directory for tPA flow
     if Dir.tpaFlow:
-        tpaFlowDir = mainDir + "/tPA_flow"
-        if not os.path.exists(tpaFlowDir):
-            os.mkdir(tpaFlowDir)
-            print("Made new clot force directory : ", tpaFlowDir)
+        Directories.tPAFlowDir = Directories.mainDir + "/tPA_flow"
+        if not os.path.exists(Directories.tPAFlowDir):
+            os.mkdir(Directories.tPAFlowDir)
+            print("Made new tPA flow directory : ", Directories.tPAFlowDir)
     
     # Directory for tPA Concentration
     if Dir.tpaConcentration:
-        tpaConcentrationDir = mainDir + "/tPA_concentration"
-        if not os.path.exists(tpaConcentrationDir):
-            os.mkdir(tpaConcentrationDir)
-            print("Made new clot force directory : ", tpaConcentrationDir)
+        Directories.tPAConcDir = Directories.mainDir + "/tPA_concentration"
+        if not os.path.exists(Directories.tPAConcDir):
+            os.mkdir(Directories.tPAConcDir)
+            print("Made new tPA concentration directory : ", Directories.tPAConcDir)
 
     # Directory for Clot leftmost value
     if Dir.clotLeft:
-        clotLeftDir = mainDir + "/clot_leftmost"
-        if not os.path.exists(clotLeftDir):
-            os.mkdir(clotLeftDir)
-            print("Made new clot force directory : ", clotLeftDir)
+        Directories.clotLeftDir = Directories.mainDir + "/clot_leftmost"
+        if not os.path.exists(Directories.clotLeftDir):
+            os.mkdir(Directories.clotLeftDir)
+            print("Made new clot leftmost directory : ", Directories.clotLeftDir)
 
-    return mainDir, clotVelDir, velDir, clotDir, tpaRhoDir, tpaFlowDir, tpaConcentrationDir, clotLeftDir
+    return Directories
 
 # Drawing a figure of the system, with velocitiy profiles sites
-def plotSystem(main_directory, lattice, bounceback, openPath, clot, pulseField):
+def plotSystem(main_directory, lattice, bounceback, openPath, clotMask, pulseField):
     # Defining the plotting image 
     nx = lattice.nx
     ny = lattice.ny
     tubeSize = lattice.tubeSize
+    branchSize = lattice.branchSize
 
     # open path = 0
     flags_plot = zeros((nx,ny))
@@ -109,7 +114,7 @@ def plotSystem(main_directory, lattice, bounceback, openPath, clot, pulseField):
     flags_plot[bounceback] = 1
 
     # clot = 2
-    flags_plot[clot] = 2
+    flags_plot[clotMask] = 2
 
     # aceleration pulse field = 3
     flags_plot[pulseField] = 3
@@ -130,7 +135,7 @@ def plotSystem(main_directory, lattice, bounceback, openPath, clot, pulseField):
     rightProfile = 1 +3*tubeSize + ((ny-1-1-4*tubeSize)//2) # coordinates of the right tube
 
     # plt.plot([nx//2, nx//2], [1, 1+tubeSize], linestyle='--', color='red', linewidth=1) # top
-    plt.plot([nx//2,nx//2],[1+2*tubeSize+1,1+3*tubeSize], linestyle='--', color='red', linewidth=1) # middle tube
+    plt.plot([nx//2,nx//2],[1+2*tubeSize+1,1+2*tubeSize + branchSize], linestyle='--', color='red', linewidth=1) # middle tube
     plt.plot([(nx-1-tubeSize), nx-2], [rightProfile, rightProfile], linestyle='--', color='red', linewidth=1) # right
     plt.plot([nx//2, nx//2], [(ny-1-tubeSize), ny-2], linestyle='--', color='red', linewidth=1) # bottom
 
@@ -138,7 +143,7 @@ def plotSystem(main_directory, lattice, bounceback, openPath, clot, pulseField):
     plt.savefig(main_directory + "/system.png",bbox_inches='tight')
     
     # Cleanup
-    plt.show() 
+    # plt.show() 
     plt.close()
 
 # Displaying the results
@@ -212,9 +217,10 @@ def plotVelocityProfiles(velocity_directory, lattice, u, execTime):
     nx = lattice.nx
     ny = lattice.ny
     tubeSize = lattice.tubeSize
+    branchSize = lattice.branchSize
 
     # Top cylindier
-    uTop = abs(u[0,nx//2,1+2*tubeSize+1:1+3*tubeSize+1])
+    uTop = abs(u[0,nx//2,1+2*tubeSize+1:1+2*tubeSize+1 + branchSize])
     umaxTop = max(uTop)
 
     # Right cylinder
@@ -227,12 +233,17 @@ def plotVelocityProfiles(velocity_directory, lattice, u, execTime):
     umaxBot = max(uBot)
 
     # Velocity Plotting variables
+    # tube
     Rtube = tubeSize//2 # radius of tube sections
     r = abs(arange((-tubeSize//2)+1,(tubeSize//2)+1,1))
     x = arange(0,tubeSize,1)
+    # branch
+    RtubeBranch = branchSize//2 # radius of tube sections
+    rBranch = abs(arange((-branchSize//2)+1,(branchSize//2)+1,1))
+    xBranch = arange(0,branchSize,1)
 
     # Expected velocities (= parabola computed form u_max)
-    expectedUTop = [umaxTop*(1-(i/Rtube)**2) for i in r]
+    expectedUTop = [umaxTop*(1-(i/RtubeBranch)**2) for i in rBranch]
     expecteduRight = [umaxMid*(1-(i/Rtube)**2) for i in r]
     expectedUBot = [umaxBot*(1-(i/Rtube)**2) for i in r]
 
@@ -242,8 +253,8 @@ def plotVelocityProfiles(velocity_directory, lattice, u, execTime):
     fig.suptitle('Velocity Profiles')
 
     # Top tube
-    ax1.plot(x,uTop, label = "Real Profile")
-    ax1.plot(x,expectedUTop, label = "Expected Profile")
+    ax1.plot(xBranch,uTop, label = "Real Profile")
+    ax1.plot(xBranch,expectedUTop, label = "Expected Profile")
     ax1.set_title('Branch cylinder')
     ax1.set_xlabel("Tube width coordinates")
     ax1.set_ylabel("Velocity")
@@ -387,6 +398,7 @@ def getVariables(type, lattice, fluid, clot, it):
     # Returning variables
     return fin, fout, rho, u
  
+#  Save in txt format the values of dissoultion of K
 def saveDissolutionAmount(file, clot, dissolution):
 
     rows, cols = where(clot)
@@ -399,6 +411,7 @@ def saveDissolutionAmount(file, clot, dissolution):
     for row in dissolution[row_start:row_end, col_start:col_end].transpose():
         file.write(" ".join(map(str, row.tolist())) + "\n")
 
+# Save the tPA in and out values around clot 
 def SaveTPAValues(file, before, tPAin, tPAout, K, clot, execTime):
     rows, cols = where(clot)
     row_start, row_end = rows.min(), rows.max() + 1
@@ -459,6 +472,56 @@ def SaveTPAValues(file, before, tPAin, tPAout, K, clot, execTime):
 
         file.write(dotline)
 
+# Save K values
+def saveKValues(file, execTime, K , dissolution, sumTPABind, tPAin, clotMask, before):
+
+    rows, cols = where(clotMask)
+    row_start, row_end = rows.min(), rows.max() + 1
+    col_start, col_end = cols.min(), cols.max() + 1
+
+    tmpin = sum(tPAin, axis=0)
+    sumTPAin = tmpin[row_start:row_end, col_start:col_end]
+
+    if before:
+        file.write("Iteration : " + str(execTime) + "\n\n")
+        file.write("######## Before Dissolution : ########\n")
+
+        file.write("\ntPAin\n\n")
+
+        for row in sumTPAin.transpose():
+            file.write(" ".join(map(str, row.tolist())) + "\n")
+
+        file.write("\nsumTPABind\n\n")
+
+        for row in sumTPABind[row_start:row_end, col_start:col_end].transpose():
+            file.write(" ".join(map(str, row.tolist())) + "\n")
+
+        file.write("\nK\n\n")
+                
+        for row in K[0,row_start:row_end, col_start:col_end].transpose():
+            file.write(" ".join(map(str, row.tolist())) + "\n")
+
+        file.write("\nDissolution amount\n\n")
+                
+        for row in dissolution[row_start:row_end, col_start:col_end].transpose():
+            file.write(" ".join(map(str, row.tolist())) + "\n")
+    
+    else : 
+        file.write("\n######## After Dissolution ########\n")
+
+        file.write("\nK\n\n")
+                
+        for row in K[0,row_start:row_end, col_start:col_end].transpose():
+            file.write(" ".join(map(str, row.tolist())) + "\n")
+
+        dotline = "\n"
+        for i in range(121): dotline+="-"
+        dotline += "\n\n"
+
+        file.write(dotline)
+        
+
+
 # Determining how much the clot dissolve by 
 # looking at the leftmost index where the average
 # value of K is below 90% of initial
@@ -468,13 +531,15 @@ def leftMostK(K, Clot, clotMask):
     col_start, col_end = cols.min(), cols.max() + 1
 
     Kmean = mean(K[0,row_start:row_end, col_start:col_end].transpose(), axis=0)
+
     threshold = 0.1 * Clot.K_initial[0]
 
     index = argmax(Kmean > threshold)
 
-    return index
+    return index, Kmean
 
-def plotKLeftMost(mainDir, kleftmost, lattice, clot):
+# Making a graph of the lesftmost non zero K value 
+def plotKLeftMost(dir, kleftmost, lattice, clot):
     plt.clf()
     x = arange(0,len(kleftmost),1)
     plt.plot(x, kleftmost, "x")
@@ -483,10 +548,10 @@ def plotKLeftMost(mainDir, kleftmost, lattice, clot):
     plt.ylabel("Left-most site index where K > 10%"+" of initial K")
     plt.ylim(0,clot.clotSize)
 
-    name = mainDir + "/ClotEvolution_it=" + str(lattice.maxIter) + ".png"
+    name = dir + "/ClotDissolution_it=" + str(lattice.maxIter) + ".png"
     plt.savefig(name, bbox_inches="tight")
 
-
+# plotting the concentration of tPA throughout the system
 def plotTPAConcentration(directory, lattice, clot, tPAin, K, bounceback, execTime):
     nx = lattice.nx
     tubeSize = lattice.tubeSize
@@ -512,12 +577,12 @@ def plotTPAConcentration(directory, lattice, clot, tPAin, K, bounceback, execTim
     ax0.plot([1+plotBiais,1+plotBiais],[1,1+tubeSize], color="red", linestyle="--", linewidth=1)
     ax0.plot([clot.coord[0],clot.coord[0]],[1,1+tubeSize], color="blue", linestyle="--", linewidth=1)
     ax0.plot([clot.coord[0]+50,clot.coord[0]+50],[1,1+tubeSize], color="red", linestyle="--", linewidth=1)
-    fig.colorbar(im0, ax=ax0, orientation='vertical', label="Velocity [m/s]", pad=0.02)
+    fig.colorbar(im0, ax=ax0, orientation='vertical', label="Density", pad=0.02)
 
     # Clot
     cmap1 = ListedColormap([(1, 1, 1, 0),  # Fully transparent for zero values (RGBA)
-                       (0, 0, 1, 1),  # Blue for non-zero values
-                       (0, 1, 1, 1)]) # yellow for higher values
+                            (0, 0, 1, 1),  # Blue for non-zero values
+                            (0, 1, 1, 1)]) # yellow for higher values
 
     ax0.imshow(K[0].transpose(), cmap=cmap1, alpha=1)
 
@@ -556,4 +621,37 @@ def plotTPAConcentration(directory, lattice, clot, tPAin, K, bounceback, execTim
     name = directory + "/" + "tPA_population_" + str(execTime)
     plt.savefig(name, bbox_inches='tight')
     plt.close()
+
+# Plotting the mean of K values by vertical slices
+def saveKMean(Directory, clot, Kmean, execTime):
+
+    plt.clf()
+    x = arange(clot.coord[0],clot.coord[0] + len(Kmean), 1)
+    plt.plot(x, Kmean)
+    plt.title("K mean values on clot, it = " + str(execTime))
+    plt.xlabel("Clot coordinate")
+    plt.ylabel("K")
+    plt.ylim(0, clot.K_initial[0]+0.2*clot.K_initial[0])
+
+    name = Directory + "/ClotEvolution_it=" + str(execTime) + ".png"
+    plt.savefig(name, bbox_inches="tight")
+
+# Saving the index of leftmost non zero K value in csv
+def saveKLefmost(Directory, kLefMost, iterations):
+
+    rows = zip(iterations, kLefMost)
+
+    file_name = Directory + '/KLeftMost.csv'
+
+    with open(file_name, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        
+        # Write the header
+        writer.writerow(['x', 'y'])
+        
+        # Write the data rows
+        writer.writerows(rows)
+
+    print(f"Data has been saved to '{file_name}'.")
+
 

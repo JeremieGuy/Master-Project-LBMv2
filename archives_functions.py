@@ -51,3 +51,36 @@ def dissolveClot(rho, u, K, clot):
     K[1, clot] =  filtered_K_tmp2
 
     return K
+
+def dissolveClot(clot, tPABind, tPAin, K, tPA, execTime, file, clotMask):
+    #Compute the total amount of population in tPAin
+    sumTPABind = sum(tPABind, axis=0)
+
+    # Compute the dissolution amount (not : k[0] and K[1] change in the same way)
+    dissolutionAmount = abs(sumTPABind*tPA.r*K[0,:,:]*clot.d)
+
+    if (39000< execTime < 40000):
+        saveKValues(file, execTime, K, dissolutionAmount, sumTPABind, tPAin, clotMask, True)
+
+    # Dissolving the clot : 
+    # 1. Start by applying dissolution
+    K_tmp0 = K[0,:,:] - dissolutionAmount
+    K_tmp1 = K[1,:,:] - dissolutionAmount
+
+    # 2. Check if K < 1e-7 -> we consider it to be = 0
+    isTooSmall0 = K_tmp0 > 1e-7 
+    isTooSmall1 = K_tmp1 > 1e-7
+
+    # 3. Adjust accordingly
+    K[0,:,:] = where(isTooSmall0, K_tmp0, 0)
+    K[1,:,:] = where(isTooSmall1, K_tmp1, 0)
+
+    if (39000< execTime < 40000):
+        saveKValues(file, execTime, K, dissolutionAmount, sumTPABind, tPAin, clotMask, False)
+
+    # 4. Update tPABind quantities
+    for i in range(4):
+        tPABind[i,:,:] -= tPABind[i,:,:]*tPA.r
+
+    # Return new tPA population and new clot value
+    return K, tPABind

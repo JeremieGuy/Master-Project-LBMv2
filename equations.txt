@@ -1,0 +1,16 @@
+Degree 2 : 
+Polynomial coefficients: [ 1.60817477e-08 -7.67633886e-04  9.53897301e+00]
+Polynomial equation:            2
+1.608e-08 x - 0.0007676 x + 9.539
+
+Degree 3 : 
+Polynomial coefficients: [-2.53924150e-13  4.87236972e-08 -2.12586325e-03  2.77826892e+01]
+Polynomial equation:             3             2
+-2.539e-13 x + 4.872e-08 x - 0.002126 x + 27.78
+
+Degree 4 : 
+Polynomial coefficients: [ 3.84733829e-18 -9.13357933e-13  9.02326685e-08 -3.26157967e-03
+  3.91679825e+01]
+Polynomial equation:            4             3             2
+3.847e-18 x - 9.134e-13 x + 9.023e-08 x - 0.003262 x + 39.17
+
